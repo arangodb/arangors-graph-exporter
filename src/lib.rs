@@ -2,6 +2,10 @@ pub mod arangodb;
 pub mod client;
 pub mod input;
 
+pub mod load;
+
+pub mod graphs;
+
 pub fn add(left: usize, right: usize) -> usize {
     left + right
 }

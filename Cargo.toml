@@ -8,7 +8,8 @@ license = "MIT License"
 repository = "https://github.com/arangodb/lightning"
 
 [dependencies]
-tokio = "1.38.0"
+anyhow = "1.0.80"
+tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0.203", features = ["derive"] }
 reqwest = { version= "0.11", features = ["json", "rustls-tls"] }
 reqwest-retry = "0.3.0"
