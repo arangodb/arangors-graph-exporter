@@ -7,10 +7,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArangoDBError {
-    error: bool,
-    error_num: i32,
-    error_message: String,
-    code: i32,
+    pub error: bool,
+    pub error_num: i32,
+    pub error_message: String,
+    pub code: i32,
 }
 
 // This function handles an HTTP response from ArangoDB, including
