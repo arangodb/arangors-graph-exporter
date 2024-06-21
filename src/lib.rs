@@ -3,7 +3,7 @@ pub mod client;
 pub mod input;
 
 pub mod load;
-mod graph_store;
+pub mod graph_store;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right
