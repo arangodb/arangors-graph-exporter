@@ -1,13 +1,14 @@
-use crate::arangodb::info::DeploymentType;
+use crate::arangodb::info::{DeploymentType, SupportInfo};
 use crate::client::auth::handle_auth;
 use crate::client::config::ClientConfig;
-use crate::input::load_request::{DataLoadRequest, DatabaseConfiguration};
+use crate::input::load_request::{DataLoadRequest, DatabaseConfiguration, CollectionName, CollectionAttribute, CollectionDescription, generate_collection_list};
 use crate::{arangodb, client};
 use bytes::Bytes;
-use log::debug;
+use log::{debug, info};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::ops::{Deref, DerefMut};
 use std::time::SystemTime;
 use tokio::task::JoinSet;
 
@@ -31,33 +32,112 @@ pub struct ShardDistribution {
     results: HashMap<String, CollectionDistribution>,
 }
 
-pub type ShardMap = HashMap<String, Vec<String>>;
+#[derive(Clone)]
+pub struct CollectionInfo {
+    pub description: CollectionDescription,
+    pub endpoint: String,
+    pub shards: Vec<Shard>,
+}
 
-pub fn compute_shard_map(
+impl CollectionInfo {
+    pub fn new(description: CollectionDescription, endpoint: Endpoint, shards: Vec<Shard>) -> Self {
+        Self {
+            description,
+            endpoint,
+            shards,
+        }
+    }
+
+    pub fn generate_shard_map(&self) -> ShardMap {
+        let mut shard_map: HashMap<Endpoint, Vec<Shard>> = HashMap::new();
+        shard_map.insert(self.endpoint.clone(), self.shards.clone());
+        shard_map
+    }
+
+    pub fn set_shards(&mut self, shards: Vec<Shard>) {
+        self.shards = shards;
+    }
+}
+
+#[derive(Clone)]
+pub struct CollectionsInfo(pub HashMap<CollectionName, CollectionInfo>);
+
+impl CollectionsInfo {
+    pub fn new() -> Self {
+        CollectionsInfo(HashMap::new())
+    }
+
+    pub fn add_collection(&mut self, name: CollectionName, info: CollectionInfo) {
+        self.0.insert(name, info);
+    }
+
+    pub fn get_collection_info(&self, name: &CollectionName) -> Option<&CollectionInfo> {
+        self.0.get(name)
+    }
+
+    pub fn total_shard_amount(&self) -> usize {
+        let mut total = 0;
+        for (_, info) in self.0.iter() {
+            total += info.shards.len();
+        }
+        total
+    }
+
+    pub fn no_shards_found(&self) -> bool {
+        self.total_shard_amount() == 0
+    }
+}
+
+impl Deref for CollectionsInfo {
+    type Target = HashMap<CollectionName, CollectionInfo>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for CollectionsInfo {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+pub type Endpoint = String;
+pub type Shard = String;
+// this depends on whether we are in a cluster or not
+// in cluster case it will be a shard, in single case it will be a collection
+
+pub type ShardMap = HashMap<Endpoint, Vec<Shard>>;
+
+pub fn compute_shard_infos(
     sd_opt: &Option<ShardDistribution>,
-    coll_list: &[String],
+    collections: Vec<CollectionDescription>,
     deployment_type: &DeploymentType,
     endpoints: &[String],
-) -> Result<ShardMap, String> {
+) -> Result<CollectionsInfo, String> {
     match deployment_type {
         DeploymentType::Single => {
-            let mut result: ShardMap = HashMap::new();
-            result.insert(endpoints[0].clone(), coll_list.to_vec());
+            let mut result = CollectionsInfo::new();
+            let c_list = generate_collection_list(collections.clone());
+            for c in collections.into_iter() {
+                result.insert(c.name.clone(), CollectionInfo::new(c, endpoints[0].clone(), c_list.clone()));
+            }
             Ok(result)
         }
         DeploymentType::Cluster => {
-            let mut result: ShardMap = HashMap::new();
+            let mut result = CollectionsInfo::new();
             let sd = sd_opt
                 .as_ref()
                 .ok_or("Could not retrieve ShardDistribution".to_string())?;
-            for c in coll_list.iter() {
+            for collection in collections.into_iter() {
+                let c_name = &collection.name;
                 // Handle the case of a smart edge collection. If c is
                 // one, then we also find a collection called `_to_`+c.
                 // In this case, we must not get those shards, because their
                 // data is already contained in `_from_`+c, just sharded
                 // differently.
                 let mut ignore: HashSet<String> = HashSet::new();
-                let smart_name = "_to_".to_owned() + c;
+                let smart_name = "_to_".to_owned() + c_name;
                 match sd.results.get(&smart_name) {
                     None => (),
                     Some(coll_dist) => {
@@ -67,9 +147,9 @@ pub fn compute_shard_map(
                         }
                     }
                 }
-                match sd.results.get(c) {
+                match sd.results.get(c_name) {
                     None => {
-                        return Err(format!("collection {} not found in shard distribution", c));
+                        return Err(format!("collection {} not found in shard distribution", c_name));
                     }
                     Some(coll_dist) => {
                         // Keys of coll_dist are the shards, value has leader:
@@ -78,10 +158,10 @@ pub fn compute_shard_map(
                                 let leader = &(location.leader);
                                 match result.get_mut(leader) {
                                     None => {
-                                        result.insert(leader.clone(), vec![shard.clone()]);
+                                        result.insert(c_name.clone(), CollectionInfo::new(collection.clone(), leader.clone(), vec![shard.clone()]));
                                     }
                                     Some(list) => {
-                                        list.push(shard.clone());
+                                        list.shards.push(shard.clone());
                                     }
                                 }
                             }
@@ -100,14 +180,44 @@ struct DumpStartBody {
     batch_size: u64,
     prefetch_count: u32,
     parallelism: u32,
-    shards: Vec<String>,
+    shards: Vec<Shard>,
+    projections: HashMap<CollectionName, Vec<CollectionAttribute>>,
+}
+
+pub fn generate_fields_map(collections_info: &CollectionsInfo) -> HashMap<CollectionName, Vec<CollectionAttribute>> {
+    let mut fields_map: HashMap<CollectionName, Vec<CollectionAttribute>> = HashMap::new();
+    for (collection_name, collection_info) in collections_info.iter() {
+        fields_map.insert(collection_name.clone(), collection_info.description.fields.clone());
+    }
+    fields_map
+}
+
+pub fn generate_shard_map(collections_info: &CollectionsInfo) -> HashMap<Endpoint, Vec<Shard>> {
+    let mut shard_map: HashMap<Endpoint, Vec<Shard>> = HashMap::new();
+
+    for (_collection_name, collection_info) in collections_info.iter() {
+        let endpoint = &collection_info.endpoint;
+        let shards = &collection_info.shards;
+        let entry = shard_map.entry(endpoint.clone()).or_insert_with(Vec::new);
+
+        for shard in shards.iter() {
+            if !entry.contains(shard) {
+                entry.push(shard.clone());
+            }
+            entry.push(shard.clone());
+        }
+    }
+
+    shard_map
 }
 
 pub async fn get_all_shard_data(
     req: &DataLoadRequest,
     connection_config: &DatabaseConfiguration,
-    shard_map: &ShardMap,
+    support_info: &SupportInfo,
+    collections_info: CollectionsInfo,
     result_channels: Vec<std::sync::mpsc::Sender<Bytes>>,
+    is_edge: bool,
 ) -> Result<(), String> {
     let begin = SystemTime::now();
 
@@ -129,13 +239,44 @@ pub async fn get_all_shard_data(
     let mut dbservers: Vec<DBServerInfo> = vec![];
     let mut error_happened = false;
     let mut error: String = "".into();
-    for (server, shard_list) in shard_map.iter() {
-        let url = make_url(&format!("/_api/dump/start?dbserver={}", server));
+    let shard_map = generate_shard_map(&collections_info);
+
+    let collection_type = if is_edge { "edge" } else { "vertex" };
+    info!(
+        "{:?} Need to fetch data from {} {} shards...",
+        std::time::SystemTime::now().duration_since(begin).unwrap(),
+        shard_map.values().map(|v| v.len()).sum::<usize>(), collection_type
+    );
+
+    for (endpoint, shard_list) in shard_map.iter() {
+        let url = if support_info.deployment == DeploymentType::Cluster {
+            make_url(&format!("/_api/dump/start?dbserver={}", endpoint))
+        } else {
+            make_url("/_api/dump/start")
+        };
+
+        let mut local_projections = HashMap::new();
+        if is_edge {
+            // those values are always present and required in an edge collection
+            local_projections.insert("_from".to_string(), vec!["_from".to_string()]);
+            local_projections.insert("_to".to_string(), vec!["_to".to_string()]);
+            // additional properties currently not supported - need to be implemented
+        } else {
+            // this value is always present and required in a vertex collection
+            local_projections.insert("_id".to_string(), vec!["_id".to_string()]);
+            let vcf_map = generate_fields_map(&collections_info);
+
+            for (collection_name, fields) in vcf_map.iter() {
+                local_projections.insert(collection_name.clone(), fields.clone());
+            }
+        }
+
         let body = DumpStartBody {
             batch_size: req.configuration.batch_size.unwrap(),
             prefetch_count: 5,
             parallelism: req.configuration.parallelism.unwrap(),
             shards: shard_list.clone(),
+            projections: local_projections.clone(),
         };
         let body_v =
             serde_json::to_vec::<DumpStartBody>(&body).expect("could not serialize DumpStartBody");
@@ -146,7 +287,7 @@ pub async fn get_all_shard_data(
         let r = arangodb::handle_arangodb_response(resp, |c| {
             c == StatusCode::NO_CONTENT || c == StatusCode::OK || c == StatusCode::CREATED
         })
-        .await;
+            .await;
         if let Err(rr) = r {
             error = rr;
             error_happened = true;
@@ -157,12 +298,12 @@ pub async fn get_all_shard_data(
         if let Some(id) = headers.get("X-Arango-Dump-Id") {
             if let Ok(id) = id.to_str() {
                 dbservers.push(DBServerInfo {
-                    dbserver: server.clone(),
+                    dbserver: endpoint.clone(),
                     dump_id: id.to_owned(),
                 });
             }
         }
-        debug!("Started dbserver {}", server);
+        debug!("Started dbserver {}", endpoint);
     }
 
     let client_clone_for_cleanup = client.clone();
@@ -179,7 +320,7 @@ pub async fn get_all_shard_data(
             let r = arangodb::handle_arangodb_response(resp, |c| {
                 c == StatusCode::OK || c == StatusCode::CREATED
             })
-            .await;
+                .await;
             if let Err(rr) = r {
                 eprintln!(
                     "An error in cancelling a dump context occurred, dbserver: {}, error: {}",
@@ -266,7 +407,7 @@ pub async fn get_all_shard_data(
                     let resp = arangodb::handle_arangodb_response(resp, |c| {
                         c == StatusCode::OK || c == StatusCode::NO_CONTENT
                     })
-                    .await?;
+                        .await?;
                     let end = SystemTime::now();
                     let dur = end.duration_since(start).unwrap();
                     if resp.status() == StatusCode::NO_CONTENT {

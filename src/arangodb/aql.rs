@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::SystemTime;
 use tokio::task::JoinSet;
+use crate::arangodb::info::SupportInfo;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct CursorOptions {

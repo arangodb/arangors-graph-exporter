@@ -27,7 +27,9 @@ impl FromPyObject<'_> for DataLoadRequest {
             )?;
         Ok(DataLoadRequest {
             database: database_value.to_string(),
+            graph_name: None,
             vertex_collections,
+            vertex_attributes: vec![],
             edge_collections,
             configuration,
         })
