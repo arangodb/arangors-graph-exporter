@@ -24,6 +24,16 @@ pub struct GraphLoader {
     graph_name: Option<String>,
     v_collections: HashMap<String, CollectionInfo>,
     e_collections: HashMap<String, CollectionInfo>,
+    vertex_map: crate::sharding::ShardMap,
+    edge_map: crate::sharding::ShardMap,
+}
+
+fn collection_name_from_id(id: &str) -> String {
+    let pos = id.find('/');
+    match pos {
+        None => "".to_string(),
+        Some(p) => id[0..p].to_string(),
+    }
 }
 
 impl GraphLoader {
@@ -40,7 +50,7 @@ impl GraphLoader {
         let v_collections = vertex_collections.into_iter().map(|c| (c.name.clone(), c)).collect();
         let e_collections = edge_collections.into_iter().map(|c| (c.name.clone(), c)).collect();
 
-        let mut graph_loader = GraphLoader { db_config, load_config, graph_name: None, v_collections, e_collections };
+        let mut graph_loader = GraphLoader { db_config, load_config, graph_name: None, v_collections, e_collections, vertex_map: HashMap::new(), edge_map: HashMap::new() };
         graph_loader.initialize().await;
         Ok(graph_loader)
     }
@@ -57,22 +67,22 @@ impl GraphLoader {
 
         // Compute which shard we must get from which dbserver, we do vertices
         // and edges right away to be able to error out early:
-        let vertex_map = compute_shard_map(&shard_dist, &self.get_vertex_collections_as_list())?;
-        let edge_map = compute_shard_map(&shard_dist, &self.get_edge_collections_as_list())?;
+        self.vertex_map = compute_shard_map(&shard_dist, &self.get_vertex_collections_as_list())?;
+        self.edge_map = compute_shard_map(&shard_dist, &self.get_edge_collections_as_list())?;
 
-        if vertex_map.is_empty() {
+        if self.vertex_map.is_empty() {
             error!("No vertex shards found!");
             return Err(GraphLoaderError::from("No vertex shards found!".to_string()));
         }
-        if edge_map.is_empty() {
+        if self.edge_map.is_empty() {
             error!("No edge shards found!");
             return Err(GraphLoaderError::from("No edge shards found!".to_string()));
         }
         info!(
           "{:?} Need to fetch data from {} vertex shards and {} edge shards...",
           std::time::SystemTime::now(),
-          vertex_map.values().map(|v| v.len()).sum::<usize>(),
-          edge_map.values().map(|v| v.len()).sum::<usize>()
+          self.vertex_map.values().map(|v| v.len()).sum::<usize>(),
+          self.edge_map.values().map(|v| v.len()).sum::<usize>()
         );
 
         Ok(())
@@ -126,29 +136,31 @@ impl GraphLoader {
         Ok(graph_loader)
     }
 
-    pub fn do_vertices<F>(&self, vertex_function: F)
+    pub async fn do_vertices<F>(&self, vertices_function: F) -> Result<(), GraphLoaderError>
     where
-        F: Fn(Value) -> Result<(), Box<dyn std::error::Error>>,
+        F: Fn(&Vec<Vec<u8>>, &Vec<Vec<Value>>) -> Result<(), GraphLoaderError> + Send + Sync + Copy,
     {
         {
             // We use multiple threads to receive the data in batches:
             let mut senders: Vec<tokio::sync::mpsc::Sender<Bytes>> = vec![];
-            let mut consumers: Vec<JoinHandle<Result<(), String>>> = vec![];
-            let prog_reported = Arc::new(Mutex::new(0_u64));
+            let mut consumers: Vec<JoinHandle<Result<(), GraphLoaderError>>> = vec![];
+
             for _i in 0..self.load_config.parallelism {
                 let (sender, mut receiver) = tokio::sync::mpsc::channel::<Bytes>(10);
                 senders.push(sender);
-                let graph_clone = graph_arc.clone();
-                let prog_reported_clone = prog_reported.clone();
+
                 let fields = self.get_all_vertices_fields_as_list();
-                let consumer = std::thread::spawn(move || -> Result<(), String> {
-                    let begin = std::time::SystemTime::now();
+                let consumer = std::thread::spawn(move || -> Result<(), GraphLoaderError> {
+                    let begin = SystemTime::now();
                     while let Some(resp) = receiver.blocking_recv() {
-                        let body = std::str::from_utf8(resp.as_ref())
-                            .map_err(|e| format!("UTF8 error when parsing body: {:?}", e))?;
+                        let body_result = std::str::from_utf8(resp.as_ref());
+                        let body = match body_result {
+                            Ok(body) => body,
+                            Err(e) => return Err(GraphLoaderError::Utf8Error(format!("UTF8 error when parsing body: {:?}", e))),
+                        };
                         debug!(
                         "{:?} Received post response, body size: {}",
-                        std::time::SystemTime::now().duration_since(begin),
+                        SystemTime::now().duration_since(begin),
                         body.len()
                     );
                         let mut vertex_keys: Vec<Vec<u8>> = Vec::with_capacity(400000);
@@ -156,10 +168,9 @@ impl GraphLoader {
                         for line in body.lines() {
                             let v: Value = match serde_json::from_str(line) {
                                 Err(err) => {
-                                    return Err(format!(
-                                        "Error parsing document for line:\n{}\n{:?}",
-                                        line, err
-                                    ));
+                                    return Err(GraphLoaderError::JsonParseError(format!(
+                                        "Error parsing document for line:\n{}\n{:?}", line, err
+                                    )));
                                 }
                                 Ok(val) => val,
                             };
@@ -172,10 +183,10 @@ impl GraphLoader {
                                     i
                                 }
                                 _ => {
-                                    return Err(format!(
+                                    return Err(GraphLoaderError::JsonParseError(format!(
                                         "JSON is no object with a string _id attribute:\n{}",
                                         line
-                                    ));
+                                    )));
                                 }
                             };
                             // If we get here, we have to extract the field
@@ -196,55 +207,114 @@ impl GraphLoader {
                             }
                             vertex_json.push(cols);
                         }
-                        let nr_vertices: u64;
-                        {
-                            let mut graph = graph_clone.write().unwrap();
-                            for i in 0..vertex_keys.len() {
-                                let k = &vertex_keys[i];
-                                let mut cols: Vec<Value> = vec![];
-                                std::mem::swap(&mut cols, &mut vertex_json[i]);
-                                graph.insert_vertex(k.clone(), cols);
-                            }
-                            nr_vertices = graph.number_of_vertices();
-                        }
-                        let mut prog = prog_reported_clone.lock().unwrap();
-                        if nr_vertices > *prog + 1000000_u64 {
-                            *prog = nr_vertices;
-                            info!(
-                            "{:?} Have imported {} vertices.",
-                            std::time::SystemTime::now().duration_since(begin).unwrap(),
-                            *prog
-                        );
-                        }
+                        vertices_function(&vertex_keys, &vertex_json)?;
                     }
                     Ok(())
                 });
                 consumers.push(consumer);
             }
-            get_all_shard_data(&req, &endpoints, &jwt_token, &ca_cert, &vertex_map, senders).await?;
+            let shard_result = crate::sharding::get_all_shard_data(&self.db_config, &self.load_config, &self.vertex_map, senders)
+                .await;
+            match shard_result {
+                Err(e) => {
+                    error!("Error fetching vertex data: {:?}", e);
+                    return Err(GraphLoaderError::from(format!("Failed to get shard data: {}", e)));
+                }
+                Ok(_) => {}
+            }
+
             info!(
             "{:?} Got all data, processing...",
-            std::time::SystemTime::now().duration_since(begin).unwrap()
+            SystemTime::now()
         );
             for c in consumers {
                 let _guck = c.join();
             }
-            let mut graph = graph_arc.write().unwrap();
-            graph.seal_vertices();
         }
-
-
-        vertex_function(data).unwrap();
+        Ok(())
     }
 
-    pub fn do_edges<F>(&self, edge_function: F)
+    pub async fn do_edges<F>(&self, edge_function: F)
     where
-        F: Fn(Value) -> Result<(), Box<dyn std::error::Error>>,
+        F: Fn(&Vec<Vec<u8>>, &Vec<Vec<u8>>) -> Result<(), Box<dyn std::error::Error>>,
     {
-        // Placeholder: Replace with actual edge fetching logic
-        for collection_info in self.e_collections.values() {
-            let data = serde_json::json!({ "example": "edge_data" }); // Example data
-            edge_function(data).unwrap();
+        let mut senders: Vec<tokio::sync::mpsc::Sender<Bytes>> = vec![];
+        let mut consumers: Vec<JoinHandle<Result<(), GraphLoaderError>>> = vec![];
+        let prog_reported = Arc::new(Mutex::new(0_u64));
+        for _i in 0..self.load_config.parallelism {
+            let (sender, mut receiver) = tokio::sync::mpsc::channel::<Bytes>(10);
+            senders.push(sender);
+            let prog_reported_clone = prog_reported.clone();
+            let consumer = std::thread::spawn(move || -> Result<(), GraphLoaderError> {
+                while let Some(resp) = receiver.blocking_recv() {
+                    let body = std::str::from_utf8(resp.as_ref())
+                        .map_err(|e| format!("UTF8 error when parsing body: {:?}", e))?;
+                    let mut froms: Vec<Vec<u8>> = Vec::with_capacity(1000000);
+                    let mut tos: Vec<Vec<u8>> = Vec::with_capacity(1000000);
+                    for line in body.lines() {
+                        let v: Value = match serde_json::from_str(line) {
+                            Err(err) => {
+                                return Err(format!(
+                                    "Error parsing document for line:\n{}\n{:?}",
+                                    line, err
+                                ));
+                            }
+                            Ok(val) => val,
+                        };
+                        let from = &v["_from"];
+                        match from {
+                            Value::String(i) => {
+                                let mut buf = vec![];
+                                buf.extend_from_slice(i[..].as_bytes());
+                                froms.push(buf);
+                            }
+                            _ => {
+                                return Err(format!(
+                                    "JSON is no object with a string _from attribute:\n{}",
+                                    line
+                                ));
+                            }
+                        }
+                        let to = &v["_to"];
+                        match to {
+                            Value::String(i) => {
+                                let mut buf = vec![];
+                                buf.extend_from_slice(i[..].as_bytes());
+                                tos.push(buf);
+                            }
+                            _ => {
+                                return Err(format!(
+                                    "JSON is no object with a string _from attribute:\n{}",
+                                    line
+                                ));
+                            }
+                        }
+                    }
+
+                    //self.edge_function(&froms, &tos)?;
+                }
+                Ok(())
+            });
+            consumers.push(consumer);
+        }
+
+        //crate::sharding::get_all_shard_data(&self.db_config, &self.load_config, &self.edge_map, senders).await?;
+        let shard_result = crate::sharding::get_all_shard_data(&self.db_config, &self.load_config, &self.edge_map, senders)
+            .await;
+        match shard_result {
+            Err(e) => {
+                error!("Error fetching vertex data: {:?}", e);
+                return Err(GraphLoaderError::from(format!("Failed to get shard data: {}", e)));
+            }
+            Ok(_) => {}
+        }
+
+        info!(
+            "{:?} Got all edge data, processing...",
+            std::time::SystemTime::now()
+        );
+        for c in consumers {
+            let _guck = c.join();
         }
     }
 

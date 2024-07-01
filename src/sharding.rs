@@ -46,9 +46,9 @@ pub(crate) struct ShardDistribution {
 
 // A ShardMap maps dbserver names to lists of shards for which these dbservers
 // are leaders. We will have one for the vertices and one for the edges.
-type ShardMap = HashMap<String, Vec<String>>;
+pub(crate) type ShardMap = HashMap<String, Vec<String>>;
 
-async fn get_all_shard_data(
+pub(crate) async fn get_all_shard_data(
     db_config: &DatabaseConfiguration,
     load_config: &DataLoadConfiguration,
     shard_map: &ShardMap,

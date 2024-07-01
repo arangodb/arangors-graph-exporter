@@ -1,3 +1,4 @@
+use std::fmt;
 use thiserror::Error;
 use reqwest::Error as ReqwestError; // Alias to disambiguate from other error types
 
@@ -14,6 +15,9 @@ pub enum GraphLoaderError {
 
     #[error("No database servers found")]
     NoDatabaseServers,
+
+    #[error("UTF-8 error: {0}")]
+    Utf8Error(String),
 
     #[error("Request error: {0}")]
     RequestError(#[from] ReqwestError),
@@ -50,6 +54,9 @@ pub enum GraphLoaderError {
 
     #[error("To collection is not a string")]
     ToCollectionNotString,
+
+    #[error("JSON parse error:\n{0}")]
+    JsonParseError(String),
 
     #[error("{0}")]
     Other(String), // Variant to handle generic String errors
