@@ -1,4 +1,3 @@
-use std::fmt;
 use thiserror::Error;
 use reqwest::Error as ReqwestError; // Alias to disambiguate from other error types
 
