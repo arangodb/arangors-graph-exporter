@@ -1,0 +1,89 @@
+#[derive(Clone, Debug)]
+pub struct DatabaseConfiguration {
+    pub database: String,
+    pub endpoints: Vec<String>,
+    pub username: String,
+    pub password: String,
+    pub jwt_token: String,
+    pub tls_cert: Vec<u8>,
+}
+
+pub struct DatabaseConfigurationBuilder {
+    database: Option<String>,
+    endpoints: Option<Vec<String>>,
+    username: Option<String>,
+    password: Option<String>,
+    jwt_token: Option<String>,
+    tls_cert: Option<Vec<u8>>,
+}
+
+impl DatabaseConfigurationBuilder {
+    pub fn new() -> Self {
+        DatabaseConfigurationBuilder {
+            database: None,
+            endpoints: None,
+            username: None,
+            password: None,
+            jwt_token: None,
+            tls_cert: None,
+        }
+    }
+
+    pub fn database(mut self, database: String) -> Self {
+        self.database = Some(database);
+        self
+    }
+
+    pub fn endpoints(mut self, endpoints: Vec<String>) -> Self {
+        self.endpoints = Some(endpoints);
+        self
+    }
+
+    pub fn username(mut self, username: String) -> Self {
+        self.username = Some(username);
+        self
+    }
+
+    pub fn password(mut self, password: String) -> Self {
+        self.password = Some(password);
+        self
+    }
+
+    pub fn jwt_token(mut self, jwt_token: String) -> Self {
+        self.jwt_token = Some(jwt_token);
+        self
+    }
+
+    pub fn tls_cert(mut self, tls_cert: Vec<u8>) -> Self {
+        self.tls_cert = Some(tls_cert);
+        self
+    }
+
+    pub fn build(self) -> DatabaseConfiguration {
+        DatabaseConfiguration {
+            database: self.database.unwrap_or_else(|| "_system".to_string()),
+            endpoints: self.endpoints.unwrap_or_else(|| vec!["http://localhost:8529".to_string()]),
+            username: self.username.unwrap_or_else(|| "root".to_string()),
+            password: self.password.unwrap_or_else(|| "".to_string()),
+            jwt_token: self.jwt_token.unwrap_or_else(|| "".to_string()),
+            tls_cert: self.tls_cert.unwrap_or_else(|| vec![]),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct DataLoadConfiguration {
+    pub parallelism: u32,
+    pub batch_size: u64,
+    pub prefetch_count: u32,
+}
+
+impl DataLoadConfiguration {
+    pub fn new(parallelism: Option<u32>, batch_size: Option<u64>, prefetch_count: Option<u32>) -> Self {
+        DataLoadConfiguration {
+            parallelism: parallelism.unwrap_or(8),
+            batch_size: batch_size.unwrap_or(100_000),
+            prefetch_count: prefetch_count.unwrap_or(5),
+        }
+    }
+}
