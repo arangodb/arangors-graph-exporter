@@ -41,7 +41,7 @@ where
 
 // This function handles an empty HTTP response from ArangoDB, including
 // connection errors and bad status codes.
-pub(crate) async fn handle_arangodb_response(
+pub async fn handle_arangodb_response(
     resp: reqwest::Result<reqwest::Response>,
     code_test: fn(code: reqwest::StatusCode) -> bool,
 ) -> Result<reqwest::Response, String> {

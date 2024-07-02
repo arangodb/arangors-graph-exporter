@@ -20,7 +20,6 @@ pub struct CollectionInfo {
 pub struct GraphLoader {
     db_config: DatabaseConfiguration,
     load_config: DataLoadConfiguration,
-    graph_name: Option<String>,
     v_collections: HashMap<String, CollectionInfo>,
     e_collections: HashMap<String, CollectionInfo>,
     vertex_map: crate::sharding::ShardMap,
@@ -49,8 +48,12 @@ impl GraphLoader {
         let v_collections = vertex_collections.into_iter().map(|c| (c.name.clone(), c)).collect();
         let e_collections = edge_collections.into_iter().map(|c| (c.name.clone(), c)).collect();
 
-        let mut graph_loader = GraphLoader { db_config, load_config, graph_name: None, v_collections, e_collections, vertex_map: HashMap::new(), edge_map: HashMap::new() };
-        graph_loader.initialize().await;
+        let mut graph_loader = GraphLoader { db_config, load_config, v_collections, e_collections, vertex_map: HashMap::new(), edge_map: HashMap::new() };
+        let init_result = graph_loader.initialize().await;
+        if let Err(e) = init_result {
+            return Err(e);
+        }
+
         Ok(graph_loader)
     }
 
@@ -137,7 +140,7 @@ impl GraphLoader {
 
     pub async fn do_vertices<F>(&self, vertices_function: F) -> Result<(), GraphLoaderError>
     where
-        F: Fn(&Vec<Vec<u8>>, &Vec<Vec<Value>>) -> Result<(), GraphLoaderError> + Send + Sync + Copy,
+        F: Fn(&Vec<Vec<u8>>, &mut Vec<Vec<Value>>) -> Result<(), GraphLoaderError> + Send + Sync + Clone + 'static,
     {
         {
             // We use multiple threads to receive the data in batches:
@@ -149,6 +152,7 @@ impl GraphLoader {
                 senders.push(sender);
 
                 let fields = self.get_all_vertices_fields_as_list();
+                let closure_clone = vertices_function.clone();
                 let consumer = std::thread::spawn(move || -> Result<(), GraphLoaderError> {
                     let begin = SystemTime::now();
                     while let Some(resp) = receiver.blocking_recv() {
@@ -206,7 +210,7 @@ impl GraphLoader {
                             }
                             vertex_json.push(cols);
                         }
-                        vertices_function(&vertex_keys, &vertex_json)?;
+                        closure_clone(&vertex_keys, &mut vertex_json)?;
                     }
                     Ok(())
                 });
@@ -235,7 +239,7 @@ impl GraphLoader {
 
     pub async fn do_edges<F>(&self, edges_function: F) -> Result<(), GraphLoaderError>
     where
-        F: Fn(&Vec<Vec<u8>>, &Vec<Vec<u8>>) -> Result<(), GraphLoaderError> + Send + Sync + Copy,
+        F: Fn(&Vec<Vec<u8>>, &Vec<Vec<u8>>) -> Result<(), GraphLoaderError> + Send + Sync + Clone + 'static,
     {
         let mut senders: Vec<tokio::sync::mpsc::Sender<Bytes>> = vec![];
         let mut consumers: Vec<JoinHandle<Result<(), GraphLoaderError>>> = vec![];
@@ -243,6 +247,7 @@ impl GraphLoader {
         for _i in 0..self.load_config.parallelism {
             let (sender, mut receiver) = tokio::sync::mpsc::channel::<Bytes>(10);
             senders.push(sender);
+            let closure_clone = edges_function.clone();
             let consumer = std::thread::spawn(move || -> Result<(), GraphLoaderError> {
                 while let Some(resp) = receiver.blocking_recv() {
                     let body = std::str::from_utf8(resp.as_ref())
@@ -289,7 +294,7 @@ impl GraphLoader {
                         }
                     }
 
-                    edges_function(&froms, &tos)?;
+                    closure_clone(&froms, &tos)?;
                 }
                 Ok(())
             });

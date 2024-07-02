@@ -1,7 +1,7 @@
 use crate::{DatabaseConfiguration};
 use crate::errors::GraphLoaderError;
 
-pub(crate) fn build_client(db_config: &DatabaseConfiguration) -> Result<reqwest::Client, GraphLoaderError> {
+pub fn build_client(db_config: &DatabaseConfiguration) -> Result<reqwest::Client, GraphLoaderError> {
     let endpoints = &db_config.endpoints;
     let tls_cert = &db_config.tls_cert;
     let use_tls = endpoints[0].starts_with("https://");

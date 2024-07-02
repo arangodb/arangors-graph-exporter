@@ -87,3 +87,38 @@ impl DataLoadConfiguration {
         }
     }
 }
+
+pub struct DataLoadConfigurationBuilder {
+    parallelism: Option<u32>,
+    batch_size: Option<u64>,
+    prefetch_count: Option<u32>,
+}
+
+impl DataLoadConfigurationBuilder {
+    pub fn new() -> Self {
+        DataLoadConfigurationBuilder {
+            parallelism: None,
+            batch_size: None,
+            prefetch_count: None,
+        }
+    }
+
+    pub fn parallelism(mut self, parallelism: u32) -> Self {
+        self.parallelism = Some(parallelism);
+        self
+    }
+
+    pub fn batch_size(mut self, batch_size: u64) -> Self {
+        self.batch_size = Some(batch_size);
+        self
+    }
+
+    pub fn prefetch_count(mut self, prefetch_count: u32) -> Self {
+        self.prefetch_count = Some(prefetch_count);
+        self
+    }
+
+    pub fn build(self) -> DataLoadConfiguration {
+        DataLoadConfiguration::new(self.parallelism, self.batch_size, self.prefetch_count)
+    }
+}
