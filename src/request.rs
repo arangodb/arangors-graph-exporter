@@ -14,7 +14,7 @@ struct ArangoDBError {
 // connection errors, bad status codes and body parsing. The template
 // type is the type of the expected body in the good case.
 pub async fn handle_arangodb_response_with_parsed_body<T>(
-    resp: reqwest::Result<reqwest::Response>,
+    resp: reqwest_middleware::Result<reqwest::Response>,
     expected_code: reqwest::StatusCode,
 ) -> Result<T, GraphLoaderError>
 where
@@ -42,7 +42,7 @@ where
 // This function handles an empty HTTP response from ArangoDB, including
 // connection errors and bad status codes.
 pub async fn handle_arangodb_response(
-    resp: reqwest::Result<reqwest::Response>,
+    resp: reqwest_middleware::Result<reqwest::Response>,
     code_test: fn(code: reqwest::StatusCode) -> bool,
 ) -> Result<reqwest::Response, String> {
     if let Err(err) = resp {

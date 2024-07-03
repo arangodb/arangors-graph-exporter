@@ -5,13 +5,15 @@ use bytes::Bytes;
 use log::{debug, error, info};
 use reqwest::StatusCode;
 use serde_json::Value;
-use crate::{DatabaseConfiguration, DataLoadConfiguration};
+use crate::{client, DatabaseConfiguration, DataLoadConfiguration};
 use crate::client::{build_client, make_url};
+use crate::client::config::ClientConfig;
 use crate::errors::{GraphLoaderError};
 use crate::request::handle_arangodb_response_with_parsed_body;
 use crate::sharding::compute_shard_map;
 
 // Define the necessary structs
+#[derive(Clone)]
 pub struct CollectionInfo {
     pub name: String,
     pub fields: Vec<String>,
@@ -58,7 +60,13 @@ impl GraphLoader {
     }
 
     async fn initialize(&mut self) -> Result<(), GraphLoaderError> {
-        let client = build_client(&self.db_config)?;
+        let use_tls = self.db_config.endpoints[0].starts_with("https://");
+        let client_config = ClientConfig::builder()
+            .n_retries(5)
+            .use_tls(use_tls)
+            .tls_cert_opt(self.db_config.tls_cert.clone())
+            .build();
+        let client = client::build_client(&client_config)?;
 
         // First ask for the shard distribution:
         let url = make_url(&self.db_config, "/_admin/cluster/shardDistribution");
@@ -357,7 +365,13 @@ async fn fetch_edge_and_vertex_collections_by_graph(db_config: &DatabaseConfigur
     let mut edge_collection_names = vec![];
     let mut vertex_collection_names = vec![];
 
-    let client = build_client(&db_config)?;
+    let use_tls = db_config.endpoints[0].starts_with("https://");
+    let client_config = ClientConfig::builder()
+        .n_retries(5)
+        .use_tls(use_tls)
+        .tls_cert_opt(db_config.tls_cert.clone())
+        .build();
+    let client = build_client(&client_config)?;
     let jwt_token = &db_config.jwt_token;
     let resp = client.get(url).bearer_auth(jwt_token).send().await;
     let parsed_response =

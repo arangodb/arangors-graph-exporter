@@ -5,7 +5,13 @@ pub struct DatabaseConfiguration {
     pub username: String,
     pub password: String,
     pub jwt_token: String,
-    pub tls_cert: Vec<u8>,
+    pub tls_cert: Option<String>,
+}
+
+impl Default for DatabaseConfiguration {
+    fn default() -> Self {
+        DatabaseConfigurationBuilder::new().build()
+    }
 }
 
 pub struct DatabaseConfigurationBuilder {
@@ -14,7 +20,7 @@ pub struct DatabaseConfigurationBuilder {
     username: Option<String>,
     password: Option<String>,
     jwt_token: Option<String>,
-    tls_cert: Option<Vec<u8>>,
+    tls_cert: Option<String>,
 }
 
 impl DatabaseConfigurationBuilder {
@@ -54,7 +60,7 @@ impl DatabaseConfigurationBuilder {
         self
     }
 
-    pub fn tls_cert(mut self, tls_cert: Vec<u8>) -> Self {
+    pub fn tls_cert(mut self, tls_cert: String) -> Self {
         self.tls_cert = Some(tls_cert);
         self
     }
@@ -66,7 +72,10 @@ impl DatabaseConfigurationBuilder {
             username: self.username.unwrap_or_else(|| "root".to_string()),
             password: self.password.unwrap_or_else(|| "".to_string()),
             jwt_token: self.jwt_token.unwrap_or_else(|| "".to_string()),
-            tls_cert: self.tls_cert.unwrap_or_else(|| vec![]),
+            tls_cert: match self.tls_cert {
+                Some(cert) => Some(cert),
+                None => None,
+            },
         }
     }
 }
@@ -76,6 +85,12 @@ pub struct DataLoadConfiguration {
     pub parallelism: u32,
     pub batch_size: u64,
     pub prefetch_count: u32,
+}
+
+impl Default for DataLoadConfiguration {
+    fn default() -> Self {
+        DataLoadConfigurationBuilder::new().build()
+    }
 }
 
 impl DataLoadConfiguration {

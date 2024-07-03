@@ -7,6 +7,7 @@ use reqwest::StatusCode;
 use tokio::task::JoinSet;
 use crate::client::{build_client, make_url};
 use crate::{DatabaseConfiguration, DataLoadConfiguration, errors};
+use crate::client::config::ClientConfig;
 use crate::errors::GraphLoaderError;
 use crate::request::handle_arangodb_response;
 
@@ -54,7 +55,13 @@ pub(crate) async fn get_all_shard_data(
     shard_map: &ShardMap,
     result_channels: Vec<tokio::sync::mpsc::Sender<Bytes>>,
 ) -> Result<(), GraphLoaderError> {
-    let client = build_client(&db_config)?;
+    let use_tls = db_config.endpoints[0].starts_with("https://");
+    let client_config = ClientConfig::builder()
+        .n_retries(5)
+        .use_tls(use_tls)
+        .tls_cert_opt(db_config.tls_cert.clone())
+        .build();
+    let client = build_client(&client_config)?;
 
     // Start a single dump context on all involved dbservers, we can do
     // this sequentially, since it is not performance critical, we can
@@ -163,7 +170,13 @@ pub(crate) async fn get_all_shard_data(
             };
             //let client_clone = client.clone(); // the clones will share
             //                                   // the connection pool
-            let client_clone = build_client(db_config)?;
+            let use_tls = db_config.endpoints[0].starts_with("https://");
+            let client_config = ClientConfig::builder()
+                .n_retries(5)
+                .use_tls(use_tls)
+                .tls_cert_opt(db_config.tls_cert.clone())
+                .build();
+            let client_clone = build_client(&client_config)?;
             let endpoint_clone = db_config.endpoints[endpoints_round_robin].clone();
             let jwt_token_clone = db_config.jwt_token.clone();
             endpoints_round_robin += 1;
