@@ -6,6 +6,9 @@ pub enum GraphLoaderError {
     #[error("Both vertex and edge collections are empty.")]
     EmptyCollections,
 
+    #[error("Graph not found")]
+    GraphNotFound,
+
     #[error("Error parsing TLS certificate: {0}")]
     TlsCertError(String),
 

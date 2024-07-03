@@ -116,8 +116,8 @@ impl GraphLoader {
                     })
                     .collect();
             }
-            Err(_) => {
-                return Err(GraphLoaderError::EmptyCollections);
+            Err(err) => {
+                return Err(err);
             }
         }
 
