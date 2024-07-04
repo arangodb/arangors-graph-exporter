@@ -49,6 +49,13 @@ pub async fn handle_arangodb_response(
         return Err(err.to_string());
     }
     let resp = resp.unwrap();
+    handle_arangodb_req_response(resp, code_test).await
+}
+
+async fn handle_arangodb_req_response(
+    resp: reqwest::Response,
+    code_test: fn(code: reqwest::StatusCode) -> bool,
+) -> Result<reqwest::Response, String> {
     let status = resp.status();
     if !code_test(status) {
         let err = resp.json::<ArangoDBError>().await;
