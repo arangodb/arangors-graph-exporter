@@ -1,4 +1,4 @@
-use crate::config::{DatabaseConfiguration, DataLoadConfiguration};
+use crate::config::{DataLoadConfiguration, DatabaseConfiguration};
 use crate::errors::GraphLoaderError;
 use crate::graph_loader::{CollectionInfo, GraphLoader};
 

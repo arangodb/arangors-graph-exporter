@@ -1,11 +1,16 @@
+mod aql;
+pub mod client;
 pub mod config;
+pub mod errors;
 pub mod graph_loader;
 pub mod load;
-mod sharding;
 pub mod request;
-pub mod client;
-pub mod errors;
+mod sharding;
+pub mod types;
 
-pub use config::{DatabaseConfiguration, DataLoadConfiguration, DatabaseConfigurationBuilder, DataLoadConfigurationBuilder};
+pub use config::{
+    DataLoadConfiguration, DataLoadConfigurationBuilder, DatabaseConfiguration,
+    DatabaseConfigurationBuilder,
+};
 pub use graph_loader::{CollectionInfo, GraphLoader};
-pub use load::{load_named_graph, load_custom_graph};
+pub use load::{load_custom_graph, load_named_graph};

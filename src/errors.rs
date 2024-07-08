@@ -1,5 +1,5 @@
-use thiserror::Error;
-use reqwest_middleware::Error as ReqwestError; // Alias to disambiguate from other error types
+use reqwest_middleware::Error as ReqwestError;
+use thiserror::Error; // Alias to disambiguate from other error types
 #[derive(Error, Debug)]
 pub enum GraphLoaderError {
     #[error("Both vertex and edge collections are empty.")]

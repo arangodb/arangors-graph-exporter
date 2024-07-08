@@ -1,5 +1,5 @@
-use reqwest_middleware::RequestBuilder;
 use crate::DatabaseConfiguration;
+use reqwest_middleware::RequestBuilder;
 
 pub fn handle_auth(
     request_builder: RequestBuilder,

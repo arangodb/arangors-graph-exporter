@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::errors::GraphLoaderError;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -24,8 +24,9 @@ where
 
     let status = resp.status();
     if status != expected_code {
-        let arango_error = resp.json::<ArangoDBError>().await
-            .map_err(|err| GraphLoaderError::ParseError(format!("Error parsing response body: {}", err)))?;
+        let arango_error = resp.json::<ArangoDBError>().await.map_err(|err| {
+            GraphLoaderError::ParseError(format!("Error parsing response body: {}", err))
+        })?;
 
         return Err(GraphLoaderError::ArangoDBError(
             arango_error.error_num,
@@ -34,10 +35,10 @@ where
         ));
     }
 
-    resp.json::<T>().await
-        .map_err(|err| GraphLoaderError::ParseError(format!("Error parsing response body: {}", err)))
+    resp.json::<T>().await.map_err(|err| {
+        GraphLoaderError::ParseError(format!("Error parsing response body: {}", err))
+    })
 }
-
 
 // This function handles an empty HTTP response from ArangoDB, including
 // connection errors and bad status codes.

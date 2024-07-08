@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use lightning::{DataLoadConfiguration, DatabaseConfiguration};
 use serde_json::Value;
-use lightning::{DatabaseConfiguration, DataLoadConfiguration};
+use std::collections::HashMap;
 
 // Define the necessary structs
 pub struct CollectionInfo {
@@ -23,8 +23,14 @@ impl GraphLoader {
         edge_collections: Vec<CollectionInfo>,
     ) -> Self {
         // Initialize steps (compute shards, etc.)
-        let v_collections = vertex_collections.into_iter().map(|c| (c.name.clone(), c)).collect();
-        let e_collections = edge_collections.into_iter().map(|c| (c.name.clone(), c)).collect();
+        let v_collections = vertex_collections
+            .into_iter()
+            .map(|c| (c.name.clone(), c))
+            .collect();
+        let e_collections = edge_collections
+            .into_iter()
+            .map(|c| (c.name.clone(), c))
+            .collect();
 
         GraphLoader {
             db_config,

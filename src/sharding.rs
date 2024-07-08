@@ -1,15 +1,16 @@
-use std::collections::{HashMap, HashSet};
-use std::time::SystemTime;
-use bytes::Bytes;
-use serde::{Deserialize, Serialize};
-use log::{debug, error};
-use reqwest::StatusCode;
-use tokio::task::JoinSet;
-use crate::client::{build_client, make_url};
-use crate::{DatabaseConfiguration, DataLoadConfiguration, errors};
 use crate::client::config::ClientConfig;
+use crate::client::{build_client, make_url};
 use crate::errors::GraphLoaderError;
 use crate::request::handle_arangodb_response;
+use crate::types::info::DeploymentType;
+use crate::{errors, DataLoadConfiguration, DatabaseConfiguration};
+use bytes::Bytes;
+use log::{debug, error};
+use reqwest::StatusCode;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::time::SystemTime;
+use tokio::task::JoinSet;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -54,6 +55,7 @@ pub(crate) async fn get_all_shard_data(
     load_config: &DataLoadConfiguration,
     shard_map: &ShardMap,
     result_channels: Vec<tokio::sync::mpsc::Sender<Bytes>>,
+    deployment_type: &DeploymentType,
 ) -> Result<(), GraphLoaderError> {
     let use_tls = db_config.endpoints[0].starts_with("https://");
     let client_config = ClientConfig::builder()
@@ -70,12 +72,16 @@ pub(crate) async fn get_all_shard_data(
     let mut error_happened = false;
     let mut error: String = "".into();
     for (server, shard_list) in shard_map.iter() {
-        let url = make_url(db_config, &format!("/_api/dump/start?dbserver={}", server));
+        let url = if deployment_type == DeploymentType::Cluster {
+            make_url(db_config, &format!("/_api/dump/start?dbserver={}", server))
+        } else {
+            make_url(db_config, "/_api/dump/start")
+        };
         let body = DumpStartBody {
             batch_size: load_config.batch_size,
             prefetch_count: load_config.prefetch_count,
             parallelism: load_config.parallelism,
-            shards: shard_list.clone(),
+            shards: shard_list.clone(), // in case of a single server, this is a collection and not a shard
         };
         let body_v =
             serde_json::to_vec::<DumpStartBody>(&body).expect("could not serialize DumpStartBody");
@@ -85,10 +91,10 @@ pub(crate) async fn get_all_shard_data(
             .body(body_v)
             .send()
             .await;
-        let r = crate::request::handle_arangodb_response(resp, |c| {
+        let r = handle_arangodb_response(resp, |c| {
             c == StatusCode::NO_CONTENT || c == StatusCode::OK || c == StatusCode::CREATED
         })
-            .await;
+        .await;
         if let Err(rr) = r {
             error = rr;
             error_happened = true;
@@ -111,10 +117,17 @@ pub(crate) async fn get_all_shard_data(
     let cleanup = |dbservers: Vec<DBServerInfo>| async move {
         debug!("Doing cleanup...");
         for dbserver in dbservers.iter() {
-            let url = make_url(db_config, &format!(
-                "/_api/dump/{}?dbserver={}",
-                dbserver.dump_id, dbserver.dbserver
-            ));
+            let url = if deployment_type == DeploymentType::Cluster {
+                make_url(
+                    db_config,
+                    &format!(
+                        "/_api/dump/{}?dbserver={}",
+                        dbserver.dump_id, dbserver.dbserver
+                    ),
+                )
+            } else {
+                make_url(db_config, &format!("/_api/dump/{}", dbserver.dump_id))
+            };
             let resp = client_clone_for_cleanup
                 .delete(url)
                 .bearer_auth(&db_config.jwt_token)
@@ -156,7 +169,8 @@ pub(crate) async fn get_all_shard_data(
         return Err(GraphLoaderError::NoDatabaseServers);
     }
 
-    let par_per_dbserver = (load_config.parallelism as usize + dbservers.len() - 1) / dbservers.len();
+    let par_per_dbserver =
+        (load_config.parallelism as usize + dbservers.len() - 1) / dbservers.len();
     let mut task_set = JoinSet::new();
     let mut endpoints_round_robin: usize = 0;
     let mut consumers_round_robin: usize = 0;
@@ -218,7 +232,7 @@ pub(crate) async fn get_all_shard_data(
                     let resp = handle_arangodb_response(resp, |c| {
                         c == StatusCode::OK || c == StatusCode::NO_CONTENT
                     })
-                        .await?;
+                    .await?;
                     let end = SystemTime::now();
                     let dur = end.duration_since(start).unwrap();
                     if resp.status() == StatusCode::NO_CONTENT {
@@ -265,7 +279,20 @@ pub(crate) async fn get_all_shard_data(
     // We drop the result_channel when we leave the function.
 }
 
-pub(crate) fn compute_shard_map(sd: &ShardDistribution, coll_list: &[String]) -> Result<ShardMap, String> {
+pub(crate) fn compute_faked_shard_map(coll_list: &[String]) -> ShardMap {
+    // not really faked, but to be able to implement this quickly, we need to
+    // simply build a map exposing the collection names instead of shard names.
+    let mut result: ShardMap = HashMap::new();
+    for c in coll_list.iter() {
+        result.insert(c.clone().to_string(), vec![c.clone()]);
+    }
+    result
+}
+
+pub(crate) fn compute_shard_map(
+    sd: &ShardDistribution,
+    coll_list: &[String],
+) -> Result<ShardMap, String> {
     let mut result: ShardMap = HashMap::new();
     for c in coll_list.iter() {
         // Handle the case of a smart edge collection. If c is

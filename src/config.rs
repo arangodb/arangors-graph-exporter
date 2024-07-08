@@ -68,7 +68,9 @@ impl DatabaseConfigurationBuilder {
     pub fn build(self) -> DatabaseConfiguration {
         DatabaseConfiguration {
             database: self.database.unwrap_or_else(|| "_system".to_string()),
-            endpoints: self.endpoints.unwrap_or_else(|| vec!["http://localhost:8529".to_string()]),
+            endpoints: self
+                .endpoints
+                .unwrap_or_else(|| vec!["http://localhost:8529".to_string()]),
             username: self.username.unwrap_or_else(|| "root".to_string()),
             password: self.password.unwrap_or_else(|| "".to_string()),
             jwt_token: self.jwt_token.unwrap_or_else(|| "".to_string()),
@@ -94,7 +96,11 @@ impl Default for DataLoadConfiguration {
 }
 
 impl DataLoadConfiguration {
-    pub fn new(parallelism: Option<u32>, batch_size: Option<u64>, prefetch_count: Option<u32>) -> Self {
+    pub fn new(
+        parallelism: Option<u32>,
+        batch_size: Option<u64>,
+        prefetch_count: Option<u32>,
+    ) -> Self {
         DataLoadConfiguration {
             parallelism: parallelism.unwrap_or(8),
             batch_size: batch_size.unwrap_or(100_000),

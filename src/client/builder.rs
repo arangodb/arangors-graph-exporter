@@ -1,11 +1,11 @@
 use crate::client::config::ClientConfig;
+use crate::DatabaseConfiguration;
 use reqwest::{Certificate, Client};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use std::fs::File;
 use std::io::Read;
-use crate::DatabaseConfiguration;
 
 pub fn make_url(db_config: &DatabaseConfiguration, path: &str) -> String {
     db_config.endpoints[0].clone() + "/_db/" + &db_config.database + path
