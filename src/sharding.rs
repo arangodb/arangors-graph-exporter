@@ -1,3 +1,4 @@
+use crate::client::auth::handle_auth;
 use crate::client::config::ClientConfig;
 use crate::client::{build_client, make_url};
 use crate::errors::GraphLoaderError;
@@ -85,9 +86,8 @@ pub(crate) async fn get_all_shard_data(
         };
         let body_v =
             serde_json::to_vec::<DumpStartBody>(&body).expect("could not serialize DumpStartBody");
-        let resp = client
-            .post(url)
-            .bearer_auth(&db_config.jwt_token)
+
+        let resp = handle_auth(client.post(url), db_config)
             .body(body_v)
             .send()
             .await;
@@ -128,9 +128,7 @@ pub(crate) async fn get_all_shard_data(
             } else {
                 make_url(db_config, &format!("/_api/dump/{}", dbserver.dump_id))
             };
-            let resp = client_clone_for_cleanup
-                .delete(url)
-                .bearer_auth(&db_config.jwt_token)
+            let resp = handle_auth(client_clone_for_cleanup.delete(url), db_config)
                 .send()
                 .await;
             let r =
@@ -203,6 +201,7 @@ pub(crate) async fn get_all_shard_data(
             if consumers_round_robin >= result_channels.len() {
                 consumers_round_robin = 0;
             }
+            let db_config_clone = db_config.clone();
             task_set.spawn(async move {
                 loop {
                     let mut url = format!(
@@ -224,11 +223,7 @@ pub(crate) async fn get_all_shard_data(
                         task_info.dbserver.dbserver,
                         task_info.current_batch_id
                     );
-                    let resp = client_clone
-                        .post(url)
-                        .bearer_auth(&jwt_token_clone)
-                        .send()
-                        .await;
+                    let resp = handle_auth(client_clone.post(url), &db_config_clone).send().await;
                     let resp = handle_arangodb_response(resp, |c| {
                         c == StatusCode::OK || c == StatusCode::NO_CONTENT
                     })

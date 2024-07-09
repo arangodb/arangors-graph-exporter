@@ -223,11 +223,8 @@ impl GraphLoader {
 
                 // First ask for the shard distribution:
                 let url = make_url(&self.db_config, "/_admin/cluster/shardDistribution");
-                let resp = client
-                    .get(url)
-                    .bearer_auth(&self.db_config.jwt_token)
-                    .send()
-                    .await;
+                let resp = handle_auth(client.get(url), &self.db_config).send().await;
+
                 let shard_dist = handle_arangodb_response_with_parsed_body::<
                     crate::sharding::ShardDistribution,
                 >(resp, StatusCode::OK)

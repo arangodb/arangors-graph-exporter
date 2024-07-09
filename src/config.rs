@@ -82,7 +82,7 @@ impl DatabaseConfigurationBuilder {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DataLoadConfiguration {
     pub parallelism: u32,
     pub batch_size: u64,
