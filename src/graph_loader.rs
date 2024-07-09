@@ -658,7 +658,7 @@ impl GraphLoader {
             consumers.push(consumer);
         }
 
-        match Some(LoadStrategy::Aql) {
+        match self.load_strategy {
             Some(LoadStrategy::Dump) => {
                 if self.edge_map.is_empty() {
                     error!("No edge shards found!");
