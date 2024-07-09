@@ -230,17 +230,6 @@ impl GraphLoader {
                     compute_shard_map(&shard_dist, &self.get_vertex_collections_as_list())?;
                 self.edge_map =
                     compute_shard_map(&shard_dist, &self.get_edge_collections_as_list())?;
-
-                if self.vertex_map.is_empty() {
-                    error!("No vertex shards found!");
-                    return Err(GraphLoaderError::from(
-                        "No vertex shards found!".to_string(),
-                    ));
-                }
-                if self.edge_map.is_empty() {
-                    error!("No edge shards found!");
-                    return Err(GraphLoaderError::from("No edge shards found!".to_string()));
-                }
             } else {
                 self.vertex_map = compute_faked_shard_map(&self.get_vertex_collections_as_list());
                 self.edge_map = compute_faked_shard_map(&self.get_edge_collections_as_list());
@@ -455,6 +444,12 @@ impl GraphLoader {
 
             match &self.load_strategy {
                 Some(LoadStrategy::Dump) => {
+                    if self.vertex_map.is_empty() {
+                        error!("No vertex shards found!");
+                        return Err(GraphLoaderError::from(
+                            "No vertex shards found!".to_string(),
+                        ));
+                    }
                     let dump_result = crate::sharding::get_all_shard_data(
                         &self.db_config,
                         &self.load_config,
@@ -663,6 +658,10 @@ impl GraphLoader {
             consumers.push(consumer);
         }
 
+        if self.edge_map.is_empty() {
+            error!("No edge shards found!");
+            return Err(GraphLoaderError::from("No edge shards found!".to_string()));
+        }
         let shard_result = crate::sharding::get_all_shard_data(
             &self.db_config,
             &self.load_config,
