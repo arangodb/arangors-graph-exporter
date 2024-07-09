@@ -46,8 +46,7 @@ pub struct GraphLoader {
 }
 
 fn collection_name_from_id(id: &str) -> String {
-    let pos = id.find('/');
-    match pos {
+    match id.find('/') {
         None => "".to_string(),
         Some(p) => id[0..p].to_string(),
     }
@@ -406,8 +405,7 @@ impl GraphLoader {
                                         )));
                                     }
                                 };
-                                let collection_name =
-                                    Value::String(collection_name_from_id(idstr)).to_string();
+                                let collection_name = collection_name_from_id(&idstr);
                                 fields = hashy.get(&collection_name).unwrap().clone();
                                 vertex_json.reserve(400000);
 
@@ -687,7 +685,7 @@ impl GraphLoader {
             }
             Some(LoadStrategy::Aql) => {
                 let mut e_collection_infos: Vec<CollectionInfo> = vec![];
-                for (_name, info) in self.v_collections.iter() {
+                for (_name, info) in self.e_collections.iter() {
                     e_collection_infos.push(info.clone());
                 }
 

@@ -238,6 +238,7 @@ fn build_aql_query(collection_description: &CollectionInfo, is_edge: bool) -> St
     let field_strings = collection_description
         .fields
         .iter()
+        .filter(|&s| s != "@collection_name") // Filter out "@collection_name" field
         .map(|s| format!("{}: doc.{},", s, s))
         .collect::<Vec<String>>()
         .join("\n");
