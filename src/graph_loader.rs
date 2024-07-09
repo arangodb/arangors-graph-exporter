@@ -685,7 +685,7 @@ impl GraphLoader {
         .await;
         match shard_result {
             Err(e) => {
-                error!("Error fetching vertex data: {:?}", e);
+                error!("Error fetching edge data: {:?}", e);
                 return Err(e);
             }
             Ok(_) => {}
