@@ -658,29 +658,60 @@ impl GraphLoader {
             consumers.push(consumer);
         }
 
-        if self.edge_map.is_empty() {
-            error!("No edge shards found!");
-            return Err(GraphLoaderError::from("No edge shards found!".to_string()));
-        }
-        let shard_result = crate::sharding::get_all_shard_data(
-            &self.db_config,
-            &self.load_config,
-            &self.edge_map,
-            senders,
-            &self
-                .support_info
-                .as_ref()
-                .unwrap()
-                .deployment
-                .deployment_type,
-        )
-        .await;
-        match shard_result {
-            Err(e) => {
-                error!("Error fetching edge data: {:?}", e);
-                return Err(e);
+        match Some(LoadStrategy::Aql) {
+            Some(LoadStrategy::Dump) => {
+                if self.edge_map.is_empty() {
+                    error!("No edge shards found!");
+                    return Err(GraphLoaderError::from("No edge shards found!".to_string()));
+                }
+                let shard_result = crate::sharding::get_all_shard_data(
+                    &self.db_config,
+                    &self.load_config,
+                    &self.edge_map,
+                    senders,
+                    &self
+                        .support_info
+                        .as_ref()
+                        .unwrap()
+                        .deployment
+                        .deployment_type,
+                )
+                .await;
+                match shard_result {
+                    Err(e) => {
+                        error!("Error fetching edge data: {:?}", e);
+                        return Err(e);
+                    }
+                    Ok(_) => {}
+                }
             }
-            Ok(_) => {}
+            Some(LoadStrategy::Aql) => {
+                let mut e_collection_infos: Vec<CollectionInfo> = vec![];
+                for (_name, info) in self.v_collections.iter() {
+                    e_collection_infos.push(info.clone());
+                }
+
+                let aql_result = get_all_data_aql(
+                    &self.db_config,
+                    e_collection_infos.as_slice(),
+                    senders,
+                    true,
+                )
+                .await;
+                match aql_result {
+                    Err(e) => {
+                        error!("Error fetching edge data: {:?}", e);
+                        return Err(GraphLoaderError::from(format!(
+                            "Failed to get aql cursor data: {}",
+                            e
+                        )));
+                    }
+                    Ok(_) => {}
+                }
+            }
+            None => {
+                return Err(GraphLoaderError::from("Load strategy not set".to_string()));
+            }
         }
 
         info!(

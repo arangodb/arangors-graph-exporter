@@ -190,7 +190,6 @@ pub(crate) async fn get_all_shard_data(
                 .build();
             let client_clone = build_client(&client_config)?;
             let endpoint_clone = db_config.endpoints[endpoints_round_robin].clone();
-            let jwt_token_clone = db_config.jwt_token.clone();
             endpoints_round_robin += 1;
             if endpoints_round_robin >= db_config.endpoints.len() {
                 endpoints_round_robin = 0;
