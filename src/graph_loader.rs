@@ -70,10 +70,6 @@ impl GraphLoader {
         vertex_collections: Vec<CollectionInfo>,
         edge_collections: Vec<CollectionInfo>,
     ) -> Result<GraphLoader, GraphLoaderError> {
-        if vertex_collections.is_empty() && edge_collections.is_empty() {
-            return Err(GraphLoaderError::EmptyCollections);
-        }
-
         let v_collections = vertex_collections
             .into_iter()
             .map(|c| (c.name.clone(), c))
@@ -304,9 +300,6 @@ impl GraphLoader {
         vertex_collections: Vec<CollectionInfo>,
         edge_collections: Vec<CollectionInfo>,
     ) -> Result<Self, GraphLoaderError> {
-        if vertex_collections.is_empty() || edge_collections.is_empty() {
-            return Err(GraphLoaderError::EmptyCollections);
-        }
         let graph_loader =
             GraphLoader::new(db_config, load_config, vertex_collections, edge_collections).await?;
         Ok(graph_loader)
