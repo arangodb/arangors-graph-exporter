@@ -24,10 +24,10 @@ pub fn build_client(
             let cert = get_cert(cert_path)?;
             client_builder.add_root_certificate(cert).use_rustls_tls()
         } else {
-            client_builder
+            client_builder.danger_accept_invalid_certs(true)
         }
     } else {
-        client_builder
+        client_builder.danger_accept_invalid_certs(true)
     };
     let client = client_builder
         .build()
@@ -37,6 +37,9 @@ pub fn build_client(
 }
 
 fn get_cert(cert_path: &String) -> Result<Certificate, String> {
+    if cert_path.is_empty() {
+        return Err("Error message from reading TLS certificate: Certificate path is empty".to_string());
+    }
     let mut cert_buf = vec![];
     let mut file = File::open(cert_path)
         .map_err(|err| format!("Error message from reading TLS certificate: {:?}", err))?;
