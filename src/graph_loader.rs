@@ -838,6 +838,9 @@ impl GraphLoader {
             if !edge_global_fields.contains(&"_to".to_string()) {
                 edge_projections.insert("_to".to_string(), vec!["_to".to_string()]);
             }
+            if !edge_global_fields.contains(&"_id".to_string()) {
+                edge_projections.insert("_id".to_string(), vec!["_id".to_string()]);
+            }
 
             // now add all user specific fields
             for (field) in edge_global_fields {
