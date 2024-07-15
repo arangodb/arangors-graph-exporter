@@ -14,7 +14,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cmp::PartialEq;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::num::ParseIntError;
 use std::thread::JoinHandle;
 use std::time::SystemTime;
@@ -43,6 +43,8 @@ pub struct GraphLoader {
     // should be used as private
     load_strategy: Option<LoadStrategy>,
     support_info: Option<SupportInfo>,
+    load_all_vertex_attributes: Option<bool>,
+    load_all_edge_attributes: Option<bool>,
 }
 
 fn collection_name_from_id(id: &str) -> String {
@@ -68,6 +70,8 @@ impl GraphLoader {
         load_config: DataLoadConfiguration,
         vertex_collections: Vec<CollectionInfo>,
         edge_collections: Vec<CollectionInfo>,
+        load_all_vertex_attributes: Option<bool>,
+        load_all_edge_attributes: Option<bool>,
     ) -> Result<GraphLoader, GraphLoaderError> {
         let v_collections = vertex_collections
             .into_iter()
@@ -87,6 +91,8 @@ impl GraphLoader {
             edge_map: HashMap::new(),
             load_strategy: None,
             support_info: None,
+            load_all_vertex_attributes,
+            load_all_edge_attributes,
         };
         let init_result = graph_loader.initialize().await;
         if let Err(e) = init_result {
@@ -251,6 +257,8 @@ impl GraphLoader {
         load_config: DataLoadConfiguration,
         graph_name: String,
         vertex_global_fields: Option<Vec<String>>,
+        load_all_vertex_attributes: Option<bool>,
+        load_all_edge_attributes: Option<bool>,
     ) -> Result<GraphLoader, GraphLoaderError> {
         let vertex_coll_list;
         let edge_coll_list;
@@ -278,8 +286,15 @@ impl GraphLoader {
             }
         }
 
-        let graph_loader =
-            GraphLoader::new(db_config, load_config, vertex_coll_list, edge_coll_list).await?;
+        let graph_loader = GraphLoader::new(
+            db_config,
+            load_config,
+            vertex_coll_list,
+            edge_coll_list,
+            load_all_vertex_attributes,
+            load_all_edge_attributes,
+        )
+        .await?;
         Ok(graph_loader)
     }
 
@@ -288,9 +303,18 @@ impl GraphLoader {
         load_config: DataLoadConfiguration,
         vertex_collections: Vec<CollectionInfo>,
         edge_collections: Vec<CollectionInfo>,
+        load_all_vertex_attributes: Option<bool>,
+        load_all_edge_attributes: Option<bool>,
     ) -> Result<Self, GraphLoaderError> {
-        let graph_loader =
-            GraphLoader::new(db_config, load_config, vertex_collections, edge_collections).await?;
+        let graph_loader = GraphLoader::new(
+            db_config,
+            load_config,
+            vertex_collections,
+            edge_collections,
+            load_all_vertex_attributes,
+            load_all_edge_attributes,
+        )
+        .await?;
         Ok(graph_loader)
     }
 
@@ -449,6 +473,8 @@ impl GraphLoader {
                             "No vertex shards found!".to_string(),
                         ));
                     }
+                    let potential_vertex_projections = self.produce_vertex_projections();
+
                     let dump_result = crate::sharding::get_all_shard_data(
                         &self.db_config,
                         &self.load_config,
@@ -460,6 +486,7 @@ impl GraphLoader {
                             .unwrap()
                             .deployment
                             .deployment_type,
+                        potential_vertex_projections,
                     )
                     .await;
                     match dump_result {
@@ -663,6 +690,7 @@ impl GraphLoader {
                     error!("No edge shards found!");
                     return Err(GraphLoaderError::from("No edge shards found!".to_string()));
                 }
+                let potential_edge_projections = self.produce_edge_projections();
                 let shard_result = crate::sharding::get_all_shard_data(
                     &self.db_config,
                     &self.load_config,
@@ -674,6 +702,7 @@ impl GraphLoader {
                         .unwrap()
                         .deployment
                         .deployment_type,
+                    potential_edge_projections,
                 )
                 .await;
                 match shard_result {
@@ -748,10 +777,75 @@ impl GraphLoader {
     }
 
     pub fn get_all_vertices_fields_as_list(&self) -> Vec<String> {
-        self.v_collections
-            .values()
-            .flat_map(|c| c.fields.clone())
-            .collect()
+        // Guaranteed to be unique
+        let mut unique_fields = HashSet::new();
+        for fields in self.v_collections.values().flat_map(|c| c.fields.clone()) {
+            unique_fields.insert(fields);
+        }
+        unique_fields.into_iter().collect()
+    }
+
+    pub fn get_all_edges_fields_as_list(&self) -> Vec<String> {
+        // Guaranteed to be unique
+        let mut unique_fields = HashSet::new();
+        for fields in self.e_collections.values().flat_map(|c| c.fields.clone()) {
+            unique_fields.insert(fields);
+        }
+        unique_fields.into_iter().collect()
+    }
+
+    pub fn produce_vertex_projections(&self) -> Option<HashMap<String, Vec<String>>> {
+        let mut potential_vertex_projections: Option<HashMap<String, Vec<String>>> = None;
+        let vertex_global_fields = self.get_all_vertices_fields_as_list();
+
+        // We can only make use of projections in case:
+        // 1.) The user has not requested all vertex attributes
+        // 2.) ArangoDB supports the dump endpoint, which is Version 3.12 or higher
+        let client_wants_all_vertex_attributes = self.load_all_vertex_attributes.unwrap_or(false);
+        if !client_wants_all_vertex_attributes {
+            let mut vertex_projections: HashMap<String, Vec<String>> = HashMap::new();
+            // if vertex_global_fields does not contain "_id" we have to add it as it is required
+            // if this is not done, the "_id" field will not be returned from the server's dump endpoint
+            if !vertex_global_fields.contains(&"_id".to_string()) {
+                vertex_projections.insert("_id".to_string(), vec!["_id".to_string()]);
+            }
+
+            // now add all user specific fields
+            for (field) in vertex_global_fields {
+                vertex_projections.insert(field.to_string(), vec![field.to_string()]);
+            }
+            potential_vertex_projections = Some(vertex_projections);
+        }
+        potential_vertex_projections
+    }
+
+    pub fn produce_edge_projections(&self) -> Option<HashMap<String, Vec<String>>> {
+        let mut potential_edge_projections: Option<HashMap<String, Vec<String>>> = None;
+        let edge_global_fields = self.get_all_edges_fields_as_list();
+
+        // We can only make use of projections in case:
+        // 1.) The user has not requested all vertex attributes
+        // 2.) ArangoDB supports the dump endpoint, which is Version 3.12 or higher
+        let client_wants_all_edge_attributes = self.load_all_edge_attributes.unwrap_or(false);
+        if !client_wants_all_edge_attributes {
+            let mut edge_projections: HashMap<String, Vec<String>> = HashMap::new();
+
+            // if edge_global_fields does not contain "_from" and "_to" we have to add it as it is required.
+            // if this is not done, those fields will not be returned from the server's dump endpoint
+            if !edge_global_fields.contains(&"_from".to_string()) {
+                edge_projections.insert("_from".to_string(), vec!["_from".to_string()]);
+            }
+            if !edge_global_fields.contains(&"_to".to_string()) {
+                edge_projections.insert("_to".to_string(), vec!["_to".to_string()]);
+            }
+
+            // now add all user specific fields
+            for (field) in edge_global_fields {
+                edge_projections.insert(field.to_string(), vec![field.to_string()]);
+            }
+            potential_edge_projections = Some(edge_projections);
+        }
+        potential_edge_projections
     }
 }
 
