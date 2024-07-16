@@ -484,6 +484,7 @@ impl GraphLoader {
                         v_collection_infos.as_slice(),
                         senders,
                         false,
+                        self.load_config.load_all_attributes_if_aql,
                     )
                     .await;
                     match aql_result {
@@ -695,6 +696,7 @@ impl GraphLoader {
                     e_collection_infos.as_slice(),
                     senders,
                     true,
+                    self.load_config.load_all_attributes_if_aql,
                 )
                 .await;
                 match aql_result {

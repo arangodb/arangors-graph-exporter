@@ -87,6 +87,7 @@ pub struct DataLoadConfiguration {
     pub parallelism: u32,
     pub batch_size: u64,
     pub prefetch_count: u32,
+    pub load_all_attributes_if_aql: bool
 }
 
 impl Default for DataLoadConfiguration {
@@ -100,11 +101,13 @@ impl DataLoadConfiguration {
         parallelism: Option<u32>,
         batch_size: Option<u64>,
         prefetch_count: Option<u32>,
+        load_all_attributes_if_aql: bool,
     ) -> Self {
         DataLoadConfiguration {
             parallelism: parallelism.unwrap_or(8),
             batch_size: batch_size.unwrap_or(100_000),
             prefetch_count: prefetch_count.unwrap_or(5),
+            load_all_attributes_if_aql: load_all_attributes_if_aql,
         }
     }
 }
@@ -113,6 +116,7 @@ pub struct DataLoadConfigurationBuilder {
     parallelism: Option<u32>,
     batch_size: Option<u64>,
     prefetch_count: Option<u32>,
+    load_all_attributes_if_aql: bool,
 }
 
 impl DataLoadConfigurationBuilder {
@@ -121,6 +125,7 @@ impl DataLoadConfigurationBuilder {
             parallelism: None,
             batch_size: None,
             prefetch_count: None,
+            load_all_attributes_if_aql: false,
         }
     }
 
@@ -139,7 +144,12 @@ impl DataLoadConfigurationBuilder {
         self
     }
 
+    pub fn load_all_attributes_if_aql(mut self, load_all_attributes_if_aql: bool) -> Self {
+        self.load_all_attributes_if_aql = load_all_attributes_if_aql;
+        self
+    }
+
     pub fn build(self) -> DataLoadConfiguration {
-        DataLoadConfiguration::new(self.parallelism, self.batch_size, self.prefetch_count)
+        DataLoadConfiguration::new(self.parallelism, self.batch_size, self.prefetch_count, self.load_all_attributes_if_aql)
     }
 }
