@@ -1,15 +1,16 @@
-use arangors::graph::Graph;
+use arangors::graph::{EdgeDefinition, Graph};
 use arangors::Connection;
 use lightning::{
     CollectionInfo, DataLoadConfiguration, DataLoadConfigurationBuilder, DatabaseConfiguration,
     DatabaseConfigurationBuilder, GraphLoader,
 };
+use serial_test::serial;
 
 use std::env;
 
-static NAMED_GRAPH: &str = "NamedGraph";
-static EDGE_COLLECTION: &str = "EdgeCollection";
-static VERTEX_COLLECTION: &str = "VertexCollection";
+static GRAPH: &str = "IntegrationTestGraph";
+static EDGE_COLLECTION: &str = "IntegrationTestEdge";
+static VERTEX_COLLECTION: &str = "IntegrationTestVertex";
 static USERNAME: &str = "root";
 static PASSWORD: &str = "test";
 static DATABASE: &str = "_system";
@@ -36,60 +37,86 @@ fn build_load_config() -> DataLoadConfiguration {
         .build()
 }
 
-async fn create_named_graph() {
+async fn create_graph() {
     let conn = Connection::establish_basic_auth(DATABASE_URL, USERNAME, PASSWORD)
         .await
         .unwrap();
 
+    let edge_definition = EdgeDefinition {
+        collection: EDGE_COLLECTION.to_string(),
+        from: vec![VERTEX_COLLECTION.to_string()],
+        to: vec![VERTEX_COLLECTION.to_string()],
+    };
     let graph = Graph::builder()
-        .name(NAMED_GRAPH.to_string())
-        .edge_definitions(vec![])
+        .name(GRAPH.to_string())
+        .edge_definitions(vec![edge_definition])
         .orphan_collections(vec![])
         .build();
 
     let db = conn.db(DATABASE).await.unwrap();
-    let graph_exist = db.graph(NAMED_GRAPH).await;
-    if let Err(_) = graph_exist {
+    let graph_exist = db.graph(GRAPH).await;
+    if graph_exist.is_err() {
+        println!("{:?}", graph_exist);
         let graph_res = db.create_graph(graph, false).await;
+        print!("{:?}", graph_res);
         assert!(graph_res.is_ok());
     }
 }
 
-async fn drop_named_graph() {
+async fn drop_graph() {
     let conn = Connection::establish_basic_auth(DATABASE_URL, USERNAME, PASSWORD)
         .await
         .unwrap();
 
     let db = conn.db(DATABASE).await.unwrap();
-    let graph_exist = db.graph(NAMED_GRAPH).await;
+    let graph_exist = db.graph(GRAPH).await;
     if let Ok(_) = graph_exist {
-        let drop_res = db.drop_graph(NAMED_GRAPH, true).await;
+        let drop_res = db.drop_graph(GRAPH, true).await;
         assert!(drop_res.is_ok());
     }
 }
 
 async fn setup() {
-    create_named_graph().await;
+    create_graph().await;
 }
 
 async fn teardown() {
-    drop_named_graph().await;
+    drop_graph().await;
 }
 
 #[tokio::test]
+#[serial]
 async fn init_named_graph_loader() {
     setup().await;
     let db_config = build_db_config();
     let load_config = build_load_config();
 
     let graph_loader_res =
-        GraphLoader::new_named(db_config, load_config, NAMED_GRAPH.to_string(), None).await;
+        GraphLoader::new_named(db_config, load_config, GRAPH.to_string(), None).await;
+    if let Err(ref e) = graph_loader_res {
+        println!("{:?}", e);
+    }
 
     assert!(graph_loader_res.is_ok());
     teardown().await;
 }
 
 #[tokio::test]
+#[serial]
+async fn init_unknown_named_graph_loader() {
+    setup().await;
+    let db_config = build_db_config();
+    let load_config = build_load_config();
+
+    let graph_loader_res =
+        GraphLoader::new_named(db_config, load_config, "UnknownGraph".to_string(), None).await;
+
+    assert!(graph_loader_res.is_err());
+    teardown().await;
+}
+
+#[tokio::test]
+#[serial]
 async fn init_custom_graph_loader() {
     setup().await;
     let db_config = build_db_config();
@@ -115,5 +142,32 @@ async fn init_custom_graph_loader() {
         println!("{:?}", e);
     }
     assert!(graph_loader_res.is_ok());
+    teardown().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn init_unknown_custom_graph_loader() {
+    setup().await;
+    let db_config = build_db_config();
+    let load_config = build_load_config();
+    let vertex_collection_info = vec![CollectionInfo {
+        name: "UnknownVertex".to_string(),
+        fields: vec![],
+    }];
+    let edge_collection_info = vec![CollectionInfo {
+        name: "UnknownEdge".to_string(),
+        fields: vec![],
+    }];
+
+    let graph_loader_res = GraphLoader::new_custom(
+        db_config,
+        load_config,
+        vertex_collection_info,
+        edge_collection_info,
+    )
+    .await;
+
+    assert!(graph_loader_res.is_err());
     teardown().await;
 }
