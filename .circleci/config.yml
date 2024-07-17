@@ -8,6 +8,7 @@ workflows:
       - build
       - test-rust:
           requires:
+            - lint-rust
             - build
           matrix:
             parameters:
