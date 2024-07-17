@@ -37,6 +37,18 @@ fn build_load_config() -> DataLoadConfiguration {
         .build()
 }
 
+async fn is_cluster() -> bool {
+    let conn = Connection::establish_basic_auth(DATABASE_URL, USERNAME, PASSWORD)
+        .await
+        .unwrap();
+    let info = conn.into_admin().await;
+    let role = info.unwrap().server_role().await.unwrap();
+    if role == "COORDINATOR" {
+        return true;
+    }
+    false
+}
+
 async fn create_graph() {
     let conn = Connection::establish_basic_auth(DATABASE_URL, USERNAME, PASSWORD)
         .await
@@ -157,5 +169,12 @@ async fn init_unknown_custom_graph_loader() {
     )
     .await;
 
-    assert!(graph_loader_res.is_err());
+    let is_cluster = is_cluster().await;
+    if is_cluster {
+        // will error out as we cannot compute the shard map during init
+        assert!(graph_loader_res.is_err());
+    } else {
+        // as we are not in a cluster, we can compute the shard map during init
+        assert!(graph_loader_res.is_ok());
+    }
 }
