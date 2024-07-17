@@ -43,8 +43,6 @@ pub struct GraphLoader {
     // should be used as private
     load_strategy: Option<LoadStrategy>,
     support_info: Option<SupportInfo>,
-    load_all_vertex_attributes: Option<bool>,
-    load_all_edge_attributes: Option<bool>,
 }
 
 fn collection_name_from_id(id: &str) -> String {
@@ -70,8 +68,6 @@ impl GraphLoader {
         load_config: DataLoadConfiguration,
         vertex_collections: Vec<CollectionInfo>,
         edge_collections: Vec<CollectionInfo>,
-        load_all_vertex_attributes: Option<bool>,
-        load_all_edge_attributes: Option<bool>,
     ) -> Result<GraphLoader, GraphLoaderError> {
         let v_collections = vertex_collections
             .into_iter()
@@ -91,8 +87,6 @@ impl GraphLoader {
             edge_map: HashMap::new(),
             load_strategy: None,
             support_info: None,
-            load_all_vertex_attributes,
-            load_all_edge_attributes,
         };
         let init_result = graph_loader.initialize().await;
         if let Err(e) = init_result {
@@ -257,8 +251,6 @@ impl GraphLoader {
         load_config: DataLoadConfiguration,
         graph_name: String,
         vertex_global_fields: Option<Vec<String>>,
-        load_all_vertex_attributes: Option<bool>,
-        load_all_edge_attributes: Option<bool>,
     ) -> Result<GraphLoader, GraphLoaderError> {
         let vertex_coll_list;
         let edge_coll_list;
@@ -291,8 +283,6 @@ impl GraphLoader {
             load_config,
             vertex_coll_list,
             edge_coll_list,
-            load_all_vertex_attributes,
-            load_all_edge_attributes,
         )
         .await?;
         Ok(graph_loader)
@@ -303,22 +293,18 @@ impl GraphLoader {
         load_config: DataLoadConfiguration,
         vertex_collections: Vec<CollectionInfo>,
         edge_collections: Vec<CollectionInfo>,
-        load_all_vertex_attributes: Option<bool>,
-        load_all_edge_attributes: Option<bool>,
     ) -> Result<Self, GraphLoaderError> {
         let graph_loader = GraphLoader::new(
             db_config,
             load_config,
             vertex_collections,
             edge_collections,
-            load_all_vertex_attributes,
-            load_all_edge_attributes,
         )
         .await?;
         Ok(graph_loader)
     }
 
-    pub async fn do_vertices<F>(&self, vertices_function: F) -> Result<(), GraphLoaderError>
+    pub async fn read_vertices_as_json<F>(&self, vertices_function: F) -> Result<(), GraphLoaderError>
     where
         F: Fn(&Vec<Vec<u8>>, &mut Vec<Vec<Value>>, &Vec<String>) -> Result<(), GraphLoaderError>
             + Send
@@ -336,9 +322,9 @@ impl GraphLoader {
                 senders.push(sender);
 
                 let vertex_global_fields = self.get_all_vertices_fields_as_list();
-                let closure_clone = vertices_function.clone();
+                let insert_vertex_clone = vertices_function.clone();
                 let strategy_clone = self.load_strategy.clone();
-                let hashy = self.get_all_vertices_fields_as_hashmap();
+                let hashy: HashMap<String, Vec<String>> = self.get_all_vertices_fields_as_hashmap();
 
                 let consumer = std::thread::spawn(move || -> Result<(), GraphLoaderError> {
                     let begin = SystemTime::now();
@@ -406,7 +392,7 @@ impl GraphLoader {
                                 }
                                 vertex_json.push(cols);
                             }
-                            closure_clone(&vertex_keys, &mut vertex_json, &vertex_global_fields)?;
+                            insert_vertex_clone(&vertex_keys, &mut vertex_json, &vertex_global_fields)?;
                         } else {
                             // This it the AQL Loading variant
                             let values = match serde_json::from_str::<CursorResult>(body) {
@@ -457,7 +443,7 @@ impl GraphLoader {
                                 }
                                 vertex_json.push(cols);
                             }
-                            closure_clone(&vertex_keys, &mut vertex_json, &fields)?;
+                            insert_vertex_clone(&vertex_keys, &mut vertex_json, &fields)?;
                         }
                     }
                     Ok(())
@@ -508,6 +494,7 @@ impl GraphLoader {
 
                     let aql_result = get_all_data_aql(
                         &self.db_config,
+                        &self.load_config,
                         v_collection_infos.as_slice(),
                         senders,
                         false,
@@ -537,7 +524,242 @@ impl GraphLoader {
         Ok(())
     }
 
-    pub async fn do_edges<F>(&self, edges_function: F) -> Result<(), GraphLoaderError>
+
+    pub async fn read_vertices_as_columns<F>(&self, vertices_function: F) -> Result<(), GraphLoaderError>
+    where
+        F: Fn(&Vec<Vec<u8>>, &mut Vec<Vec<Value>>, &Vec<String>) -> Result<(), GraphLoaderError>
+            + Send
+            + Sync
+            + Clone
+            + 'static,
+    {
+        {
+            // We use multiple threads to receive the data in batches:
+            let mut senders: Vec<tokio::sync::mpsc::Sender<Bytes>> = vec![];
+            let mut consumers: Vec<JoinHandle<Result<(), GraphLoaderError>>> = vec![];
+
+            for _i in 0..self.load_config.parallelism {
+                let (sender, mut receiver) = tokio::sync::mpsc::channel::<Bytes>(10);
+                senders.push(sender);
+
+                let vertex_global_fields = self.get_all_vertices_fields_as_list();
+                let insert_vertex_clone = vertices_function.clone();
+                let strategy_clone = self.load_strategy.clone();
+                let hashy: HashMap<String, Vec<String>> = self.get_all_vertices_fields_as_hashmap();
+
+                let consumer = std::thread::spawn(move || -> Result<(), GraphLoaderError> {
+                    let begin = SystemTime::now();
+                    while let Some(resp) = receiver.blocking_recv() {
+                        let body_result = std::str::from_utf8(resp.as_ref());
+                        let body = match body_result {
+                            Ok(body) => body,
+                            Err(e) => {
+                                return Err(GraphLoaderError::Utf8Error(format!(
+                                    "UTF8 error when parsing body: {:?}",
+                                    e
+                                )))
+                            }
+                        };
+                        debug!(
+                            "{:?} Received post response, body size: {}",
+                            SystemTime::now().duration_since(begin),
+                            body.len()
+                        );
+                        let mut vertex_keys: Vec<Vec<u8>> = Vec::with_capacity(400000);
+                        let mut vertex_json: Vec<Vec<Value>> = vec![];
+
+                        if strategy_clone == Option::from(LoadStrategy::Dump) {
+                            for line in body.lines() {
+                                let v: Value = match serde_json::from_str(line) {
+                                    Err(err) => {
+                                        return Err(GraphLoaderError::JsonParseError(format!(
+                                            "Error parsing document for line:\n{}\n{:?}",
+                                            line, err
+                                        )));
+                                    }
+                                    Ok(val) => val,
+                                };
+                                let id = &v["_id"];
+                                let idstr: &String = match id {
+                                    Value::String(i) => {
+                                        let mut buf = vec![];
+                                        buf.extend_from_slice(i[..].as_bytes());
+                                        vertex_keys.push(buf);
+                                        i
+                                    }
+                                    _ => {
+                                        return Err(GraphLoaderError::JsonParseError(format!(
+                                            "JSON is no object with a string _id attribute:\n{}",
+                                            line
+                                        )));
+                                    }
+                                };
+                                // If we get here, we have to extract the field
+                                // values in `fields` from the json and store it
+                                // to vertex_json:
+                                let get_value = |v: &Value, field: &str| -> Value {
+                                    if field == "@collection_name" {
+                                        Value::String(collection_name_from_id(idstr))
+                                    } else {
+                                        v[field].clone()
+                                    }
+                                };
+
+                                if condition {
+                                    vertex_json.push(v)
+
+                                } else {
+                                    let mut cols: Vec<Value> =
+                                        Vec::with_capacity(vertex_global_fields.len());
+                                    for f in vertex_global_fields.iter() {
+                                        let j = get_value(&v, f);
+                                        cols.push(j);
+                                    }
+                                    vertex_json.push(cols);
+                                }
+                            }
+                            insert_vertex_clone(&vertex_keys, &mut vertex_json, &vertex_global_fields)?;
+                        } else {
+                            // This it the AQL Loading variant
+                            let values = match serde_json::from_str::<CursorResult>(body) {
+                                Err(err) => {
+                                    return Err(GraphLoaderError::JsonParseError(format!(
+                                        "AQL Error parsing document for body:\n{}\n{:?}",
+                                        body, err
+                                    )));
+                                }
+                                Ok(val) => val,
+                            };
+                            let mut fields = vec![];
+                            for v in values.result.into_iter() {
+                                let id = &v["_id"];
+                                let idstr: &String = match id {
+                                    Value::String(i) => i,
+                                    _ => {
+                                        return Err(GraphLoaderError::JsonParseError(format!(
+                                            "JSON is no object with a string _id attribute:\n{}",
+                                            v
+                                        )));
+                                    }
+                                };
+                                let collection_name = collection_name_from_id(&idstr);
+                                fields = hashy.get(&collection_name).unwrap().clone();
+                                vertex_json.reserve(400000);
+
+                                let key = &v["_key"];
+                                let mut buf = vec![];
+                                buf.extend_from_slice(key.as_str().unwrap().as_bytes());
+                                vertex_keys.push(buf);
+
+                                // If we get here, we have to extract the field
+                                // values in `fields` from the json and store it
+                                // to vertex_json:
+                                let get_value = |v: &Value, field: &str| -> Value {
+                                    if field == "@collection_name" {
+                                        Value::String(collection_name_from_id(idstr))
+                                    } else {
+                                        v[field].clone()
+                                    }
+                                };
+
+                                let mut cols: Vec<Value> = Vec::with_capacity(fields.len());
+                                for f in fields.iter() {
+                                    let j = get_value(&v, f);
+                                    cols.push(j);
+                                }
+                                vertex_json.push(cols);
+                            }
+                            insert_vertex_clone(&vertex_keys, &mut vertex_json, &fields)?;
+                        }
+                    }
+                    Ok(())
+                });
+                consumers.push(consumer);
+            }
+
+            match &self.load_strategy {
+                Some(LoadStrategy::Dump) => {
+                    if self.vertex_map.is_empty() {
+                        error!("No vertex shards found!");
+                        return Err(GraphLoaderError::from(
+                            "No vertex shards found!".to_string(),
+                        ));
+                    }
+                    let potential_vertex_projections = self.produce_vertex_projections();
+
+                    let dump_result = crate::sharding::get_all_shard_data(
+                        &self.db_config,
+                        &self.load_config,
+                        &self.vertex_map,
+                        senders,
+                        &self
+                            .support_info
+                            .as_ref()
+                            .unwrap()
+                            .deployment
+                            .deployment_type,
+                        potential_vertex_projections,
+                    )
+                    .await;
+                    match dump_result {
+                        Err(e) => {
+                            error!("Error fetching vertex data: {:?}", e);
+                            return Err(GraphLoaderError::from(format!(
+                                "Failed to get shard data: {}",
+                                e
+                            )));
+                        }
+                        Ok(_) => {}
+                    }
+                }
+                Some(LoadStrategy::Aql) => {
+                    let mut v_collection_infos: Vec<CollectionInfo> = vec![];
+                    for (_name, info) in self.v_collections.iter() {
+                        v_collection_infos.push(info.clone());
+                    }
+
+                    let aql_result = get_all_data_aql(
+                        &self.db_config,
+                        &self.load_config,
+                        v_collection_infos.as_slice(),
+                        senders,
+                        false,
+                    )
+                    .await;
+                    match aql_result {
+                        Err(e) => {
+                            error!("Error fetching vertex data: {:?}", e);
+                            return Err(GraphLoaderError::from(format!(
+                                "Failed to get aql cursor data: {}",
+                                e
+                            )));
+                        }
+                        Ok(_) => {}
+                    }
+                }
+                None => {
+                    return Err(GraphLoaderError::from("Load strategy not set".to_string()));
+                }
+            }
+
+            info!("{:?} Got all data, processing...", SystemTime::now());
+            for c in consumers {
+                let _guck = c.join();
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn read_edges_as_json<F>(&self, edges_function: F) -> Result<(), GraphLoaderError>
+    where
+        F: Fn(&Vec<Vec<u8>>, &Vec<Vec<u8>>, &Vec<Vec<u8>>) -> Result<(), GraphLoaderError>
+            + Send
+            + Sync
+            + Clone
+            + 'static,
+    {
+
+    pub async fn read_edges_as_columns<F>(&self, edges_function: F) -> Result<(), GraphLoaderError>
     where
         F: Fn(&Vec<Vec<u8>>, &Vec<Vec<u8>>, &Vec<Vec<u8>>) -> Result<(), GraphLoaderError>
             + Send
@@ -551,7 +773,8 @@ impl GraphLoader {
         for _i in 0..self.load_config.parallelism {
             let (sender, mut receiver) = tokio::sync::mpsc::channel::<Bytes>(10);
             senders.push(sender);
-            let closure_clone = edges_function.clone();
+
+            let insert_edge_clone = edges_function.clone();
             let strategy_clone = self.load_strategy.clone();
 
             let consumer = std::thread::spawn(move || -> Result<(), GraphLoaderError> {
@@ -677,7 +900,7 @@ impl GraphLoader {
                         }
                     }
 
-                    closure_clone(&col_names, &froms, &tos)?;
+                    insert_edge_clone(&col_names, &froms, &tos)?;
                 }
                 Ok(())
             });
@@ -721,6 +944,7 @@ impl GraphLoader {
 
                 let aql_result = get_all_data_aql(
                     &self.db_config,
+                    &self.load_config,
                     e_collection_infos.as_slice(),
                     senders,
                     true,
@@ -752,6 +976,8 @@ impl GraphLoader {
         Ok(())
     }
 
+
+    
     pub fn get_vertex_collections_as_list(&self) -> Vec<String> {
         self.v_collections.keys().cloned().collect()
     }
@@ -801,7 +1027,7 @@ impl GraphLoader {
         // We can only make use of projections in case:
         // 1.) The user has not requested all vertex attributes
         // 2.) ArangoDB supports the dump endpoint, which is Version 3.12 or higher
-        let client_wants_all_vertex_attributes = self.load_all_vertex_attributes.unwrap_or(false);
+        let client_wants_all_vertex_attributes = self.load_config.load_all_vertex_attributes;
         if !client_wants_all_vertex_attributes {
             let mut vertex_projections: HashMap<String, Vec<String>> = HashMap::new();
             // if vertex_global_fields does not contain "_id" we have to add it as it is required
@@ -811,7 +1037,7 @@ impl GraphLoader {
             }
 
             // now add all user specific fields
-            for (field) in vertex_global_fields {
+            for field in vertex_global_fields {
                 vertex_projections.insert(field.to_string(), vec![field.to_string()]);
             }
             potential_vertex_projections = Some(vertex_projections);
@@ -826,7 +1052,7 @@ impl GraphLoader {
         // We can only make use of projections in case:
         // 1.) The user has not requested all vertex attributes
         // 2.) ArangoDB supports the dump endpoint, which is Version 3.12 or higher
-        let client_wants_all_edge_attributes = self.load_all_edge_attributes.unwrap_or(false);
+        let client_wants_all_edge_attributes = self.load_config.load_all_edge_attributes;
         if !client_wants_all_edge_attributes {
             let mut edge_projections: HashMap<String, Vec<String>> = HashMap::new();
 
@@ -842,8 +1068,7 @@ impl GraphLoader {
                 edge_projections.insert("_id".to_string(), vec!["_id".to_string()]);
             }
 
-            // now add all user specific fields
-            for (field) in edge_global_fields {
+            for field in edge_global_fields {
                 edge_projections.insert(field.to_string(), vec![field.to_string()]);
             }
             potential_edge_projections = Some(edge_projections);
