@@ -90,9 +90,7 @@ impl GraphLoader {
             support_info: None,
         };
         let init_result = graph_loader.initialize().await;
-        if let Err(e) = init_result {
-            return Err(e);
-        }
+        init_result?;
 
         Ok(graph_loader)
     }
@@ -188,8 +186,8 @@ impl GraphLoader {
         &mut self,
         client: &ClientWithMiddleware,
     ) -> Result<(), String> {
-        let dump_support_enabled = self.does_arangodb_supports_dump_endpoint(&client).await?;
-        self.support_info = Some(self.get_arangodb_support_information(&client).await?);
+        let dump_support_enabled = self.does_arangodb_supports_dump_endpoint(client).await?;
+        self.support_info = Some(self.get_arangodb_support_information(client).await?);
         self.load_strategy = Some(self.identify_arangodb_load_strategy(dump_support_enabled));
         Ok(())
     }
@@ -262,7 +260,7 @@ impl GraphLoader {
                     .iter()
                     .map(|c| CollectionInfo {
                         name: c.clone(),
-                        fields: vertex_global_fields.clone().unwrap_or_else(Vec::new),
+                        fields: vertex_global_fields.clone().unwrap_or_default(),
                     })
                     .collect();
 
@@ -324,7 +322,7 @@ impl GraphLoader {
 
                 let vertex_global_fields = self.get_all_vertices_fields_as_list();
                 let insert_vertex_clone = vertices_function.clone();
-                let strategy_clone = self.load_strategy.clone();
+                let strategy_clone = self.load_strategy;
                 let hashy: HashMap<String, Vec<String>> = self.get_all_vertices_fields_as_hashmap();
                 let load_config_clone = self.load_config.clone();
 
@@ -440,7 +438,7 @@ impl GraphLoader {
                                     vertex_json.push(vec![vertex]);
 
                                 } else {
-                                    let collection_name = collection_name_from_id(&idstr);
+                                    let collection_name = collection_name_from_id(idstr);
                                     fields = hashy.get(&collection_name).unwrap().clone();
 
                                     // If we get here, we have to extract the field
@@ -560,7 +558,7 @@ impl GraphLoader {
 
             let edge_global_fields = self.get_all_edges_fields_as_list();
             let insert_edge_clone = edges_function.clone();
-            let strategy_clone = self.load_strategy.clone();
+            let strategy_clone = self.load_strategy;
             // let hashy: HashMap<String, Vec<String>> = self.get_all_edges_fields_as_hashmap();
             let load_config_clone = self.load_config.clone();
 
@@ -923,7 +921,7 @@ async fn get_graph_collections(
     graph_name: String,
 ) -> Result<(Vec<String>, Vec<String>), GraphLoaderError> {
     let param_url = format!("/_api/gharial/{}", graph_name);
-    let url = make_url(&db_config, &param_url);
+    let url = make_url(db_config, &param_url);
     let graph_name = graph_name.clone();
     let (vertex_collections, edge_collections) =
         fetch_edge_and_vertex_collections_by_graph(db_config, url).await?;
