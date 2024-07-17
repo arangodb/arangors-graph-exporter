@@ -54,13 +54,9 @@ async fn create_graph() {
         .build();
 
     let db = conn.db(DATABASE).await.unwrap();
-    let graph_exist = db.graph(GRAPH).await;
-    if graph_exist.is_err() {
-        println!("{:?}", graph_exist);
-        let graph_res = db.create_graph(graph, false).await;
-        print!("{:?}", graph_res);
-        assert!(graph_res.is_ok());
-    }
+    let _ = db.drop_graph(GRAPH, true).await;
+    let graph_res = db.create_graph(graph, false).await;
+    assert!(graph_res.is_ok());
 }
 
 async fn drop_graph() {
@@ -69,11 +65,7 @@ async fn drop_graph() {
         .unwrap();
 
     let db = conn.db(DATABASE).await.unwrap();
-    let graph_exist = db.graph(GRAPH).await;
-    if let Ok(_) = graph_exist {
-        let drop_res = db.drop_graph(GRAPH, true).await;
-        assert!(drop_res.is_ok());
-    }
+    let _ = db.drop_graph(GRAPH, true).await;
 }
 
 async fn setup() {
@@ -104,7 +96,6 @@ async fn init_named_graph_loader() {
 #[tokio::test]
 #[serial]
 async fn init_unknown_named_graph_loader() {
-    setup().await;
     let db_config = build_db_config();
     let load_config = build_load_config();
 
@@ -112,7 +103,6 @@ async fn init_unknown_named_graph_loader() {
         GraphLoader::new_named(db_config, load_config, "UnknownGraph".to_string(), None).await;
 
     assert!(graph_loader_res.is_err());
-    teardown().await;
 }
 
 #[tokio::test]
@@ -148,7 +138,6 @@ async fn init_custom_graph_loader() {
 #[tokio::test]
 #[serial]
 async fn init_unknown_custom_graph_loader() {
-    setup().await;
     let db_config = build_db_config();
     let load_config = build_load_config();
     let vertex_collection_info = vec![CollectionInfo {
@@ -169,5 +158,4 @@ async fn init_unknown_custom_graph_loader() {
     .await;
 
     assert!(graph_loader_res.is_err());
-    teardown().await;
 }
