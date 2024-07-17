@@ -80,7 +80,7 @@ impl DatabaseConfigurationBuilder {
             username: self.username.unwrap_or_else(|| "root".to_string()),
             password: self.password.unwrap_or_default(),
             jwt_token: self.jwt_token.unwrap_or_default(),
-            tls_cert: self.tls_cert.map(|cert| cert),
+            tls_cert: self.tls_cert,
         }
     }
 }
