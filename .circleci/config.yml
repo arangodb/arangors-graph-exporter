@@ -1,5 +1,11 @@
 version: 2.1
 
+executors:
+  generate-executor:
+    machine:
+      image: ubuntu-2204:2024.01.1
+    working_directory: ~/project
+
 workflows:
   version: 2
   ci:
@@ -46,10 +52,14 @@ jobs:
         type: string
       db-version:
         type: string
-    docker:
-      - image: cimg/rust:1.75
+    executor: generate-executor
     steps:
       - checkout
+      - run:
+          name: Install Rust
+          command: |
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            source $HOME/.cargo/env
       - run:
           name: Start Database
           command: ./docker/start_db.sh
