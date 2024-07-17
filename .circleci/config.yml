@@ -16,14 +16,13 @@ workflows:
 
 jobs:
   build:
+    docker:
+      - image: cimg/rust:1.75
     steps:
-      docker:
-        - image: cimg/rust:1.75
-      steps:
-        - checkout
-        - run:
-            name: Compile lightning
-            command: cargo build --release
+      - checkout
+      - run:
+          name: Compile lightning
+          command: cargo build --release
 
   lint-rust:
     docker:
