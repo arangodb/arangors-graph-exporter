@@ -111,7 +111,7 @@ async fn init_custom_graph_loader() {
     )
     .await;
 
-    if let Err(e) = graph_loader_res {
+    if let Err(ref e) = graph_loader_res {
         println!("{:?}", e);
     }
     assert!(graph_loader_res.is_ok());
