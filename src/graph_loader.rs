@@ -55,11 +55,11 @@ fn collection_name_from_id(id: &str) -> String {
 
 impl PartialEq<DeploymentType> for &DeploymentType {
     fn eq(&self, other: &DeploymentType) -> bool {
-        match (self, other) {
-            (DeploymentType::Cluster, DeploymentType::Cluster) => true,
-            (DeploymentType::Single, DeploymentType::Single) => true,
-            _ => false,
-        }
+        matches!(
+            (self, other),
+            (DeploymentType::Cluster, DeploymentType::Cluster)
+                | (DeploymentType::Single, DeploymentType::Single)
+        )
     }
 }
 
@@ -211,7 +211,7 @@ impl GraphLoader {
             .deployment_type;
 
         if load_strategy == &LoadStrategy::Dump {
-            if deployment_type == &DeploymentType::Cluster {
+            if *deployment_type == DeploymentType::Cluster {
                 // Compute which shard we must get from which dbserver, we do vertices
                 // and edges right away to be able to error out early:
 
@@ -431,7 +431,7 @@ impl GraphLoader {
                                     vertex_json.push(vec![vertex]);
                                 } else {
                                     let collection_name = collection_name_from_id(idstr);
-                                    fields = hashy.get(&collection_name).unwrap().clone();
+                                    fields.clone_from(hashy.get(&collection_name).unwrap());
 
                                     // If we get here, we have to extract the field
                                     // values in `fields` from the json and store it
@@ -484,15 +484,12 @@ impl GraphLoader {
                         potential_vertex_projections,
                     )
                     .await;
-                    match dump_result {
-                        Err(e) => {
-                            error!("Error fetching vertex data: {:?}", e);
-                            return Err(GraphLoaderError::from(format!(
-                                "Failed to get shard data: {}",
-                                e
-                            )));
-                        }
-                        Ok(_) => {}
+                    if let Err(e) = dump_result {
+                        error!("Error fetching vertex data: {:?}", e);
+                        return Err(GraphLoaderError::from(format!(
+                            "Error fetching vertex data: {:?}",
+                            e
+                        )));
                     }
                 }
                 Some(LoadStrategy::Aql) => {
@@ -509,15 +506,12 @@ impl GraphLoader {
                         false,
                     )
                     .await;
-                    match aql_result {
-                        Err(e) => {
-                            error!("Error fetching vertex data: {:?}", e);
-                            return Err(GraphLoaderError::from(format!(
-                                "Failed to get aql cursor data: {}",
-                                e
-                            )));
-                        }
-                        Ok(_) => {}
+                    if let Err(e) = aql_result {
+                        error!("Error fetching edge data: {:?}", e);
+                        return Err(GraphLoaderError::from(format!(
+                            "Failed to get aql cursor data: {}",
+                            e
+                        )));
                     }
                 }
                 None => {
@@ -763,12 +757,9 @@ impl GraphLoader {
                     potential_edge_projections,
                 )
                 .await;
-                match shard_result {
-                    Err(e) => {
-                        error!("Error fetching edge data: {:?}", e);
-                        return Err(e);
-                    }
-                    Ok(_) => {}
+                if let Err(e) = shard_result {
+                    error!("Error fetching edge data: {:?}", e);
+                    return Err(e);
                 }
             }
             Some(LoadStrategy::Aql) => {
@@ -785,15 +776,12 @@ impl GraphLoader {
                     true,
                 )
                 .await;
-                match aql_result {
-                    Err(e) => {
-                        error!("Error fetching edge data: {:?}", e);
-                        return Err(GraphLoaderError::from(format!(
-                            "Failed to get aql cursor data: {}",
-                            e
-                        )));
-                    }
-                    Ok(_) => {}
+                if let Err(e) = aql_result {
+                    error!("Error fetching edge data: {:?}", e);
+                    return Err(GraphLoaderError::from(format!(
+                        "Failed to get aql cursor data: {}",
+                        e
+                    )));
                 }
             }
             None => {
@@ -828,9 +816,8 @@ impl GraphLoader {
 
     pub fn get_vertex_fields_as_list(&self, collection_name: &String) -> Vec<String> {
         let mut fields = vec![];
-        match self.v_collections.get(collection_name) {
-            Some(c) => fields.extend(c.fields.clone()),
-            None => {}
+        if let Some(c) = self.v_collections.get(collection_name) {
+            fields.extend(c.fields.clone());
         }
         fields
     }

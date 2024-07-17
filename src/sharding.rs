@@ -89,7 +89,7 @@ pub(crate) async fn get_all_shard_data(
             projections: None,
         };
         if projections.is_some() {
-            body.projections = projections.clone();
+            body.projections.clone_from(&projections)
         }
         let body_v =
             serde_json::to_vec::<DumpStartBody>(&body).expect("could not serialize DumpStartBody");
