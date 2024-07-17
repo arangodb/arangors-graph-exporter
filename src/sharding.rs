@@ -229,7 +229,9 @@ pub(crate) async fn get_all_shard_data(
                         task_info.dbserver.dbserver,
                         task_info.current_batch_id
                     );
-                    let resp = handle_auth(client_clone.post(url), &db_config_clone).send().await;
+                    let resp = handle_auth(client_clone.post(url), &db_config_clone)
+                        .send()
+                        .await;
                     let resp = handle_arangodb_response(resp, |c| {
                         c == StatusCode::OK || c == StatusCode::NO_CONTENT
                     })

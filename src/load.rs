@@ -9,13 +9,7 @@ pub async fn load_named_graph(
     graph_name: String,
     vertex_global_fields: Option<Vec<String>>,
 ) -> Result<GraphLoader, GraphLoaderError> {
-    GraphLoader::new_named(
-        db_config,
-        load_config,
-        graph_name,
-        vertex_global_fields,
-    )
-    .await
+    GraphLoader::new_named(db_config, load_config, graph_name, vertex_global_fields).await
 }
 
 pub async fn load_custom_graph(
@@ -24,11 +18,5 @@ pub async fn load_custom_graph(
     vertex_collections: Vec<CollectionInfo>,
     edge_collections: Vec<CollectionInfo>,
 ) -> Result<GraphLoader, GraphLoaderError> {
-    GraphLoader::new_custom(
-        db_config,
-        load_config,
-        vertex_collections,
-        edge_collections,
-    )
-    .await
+    GraphLoader::new_custom(db_config, load_config, vertex_collections, edge_collections).await
 }

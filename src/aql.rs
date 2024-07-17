@@ -242,7 +242,11 @@ pub async fn get_all_data_aql(
     Ok(())
 }
 
-fn build_aql_query(collection_description: &CollectionInfo, is_edge: bool, load_all_attributes: bool) -> String {
+fn build_aql_query(
+    collection_description: &CollectionInfo,
+    is_edge: bool,
+    load_all_attributes: bool,
+) -> String {
     if load_all_attributes {
         return "FOR doc in @@col RETURN doc".to_string();
     }

@@ -169,6 +169,12 @@ impl DataLoadConfigurationBuilder {
     }
 
     pub fn build(self) -> DataLoadConfiguration {
-        DataLoadConfiguration::new(self.parallelism, self.batch_size, self.prefetch_count, self.load_all_vertex_attributes, self.load_all_edge_attributes)
+        DataLoadConfiguration::new(
+            self.parallelism,
+            self.batch_size,
+            self.prefetch_count,
+            self.load_all_vertex_attributes,
+            self.load_all_edge_attributes,
+        )
     }
 }

@@ -8,12 +8,12 @@ use crate::sharding::{compute_faked_shard_map, compute_shard_map};
 use crate::types::info::{DeploymentType, LoadStrategy, SupportInfo, VersionInformation};
 use crate::{DataLoadConfiguration, DatabaseConfiguration};
 use bytes::Bytes;
+use core::panic;
 use log::{debug, error, info};
 use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use core::panic;
 use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet};
 use std::num::ParseIntError;
@@ -277,13 +277,8 @@ impl GraphLoader {
             }
         }
 
-        let graph_loader = GraphLoader::new(
-            db_config,
-            load_config,
-            vertex_coll_list,
-            edge_coll_list,
-        )
-        .await?;
+        let graph_loader =
+            GraphLoader::new(db_config, load_config, vertex_coll_list, edge_coll_list).await?;
         Ok(graph_loader)
     }
 
@@ -293,13 +288,8 @@ impl GraphLoader {
         vertex_collections: Vec<CollectionInfo>,
         edge_collections: Vec<CollectionInfo>,
     ) -> Result<Self, GraphLoaderError> {
-        let graph_loader = GraphLoader::new(
-            db_config,
-            load_config,
-            vertex_collections,
-            edge_collections,
-        )
-        .await?;
+        let graph_loader =
+            GraphLoader::new(db_config, load_config, vertex_collections, edge_collections).await?;
         Ok(graph_loader)
     }
 
@@ -378,7 +368,6 @@ impl GraphLoader {
                                 if load_config_clone.load_all_vertex_attributes {
                                     vertex.as_object_mut().unwrap().remove("_id");
                                     vertex_json.push(vec![vertex]);
-
                                 } else {
                                     // If we get here, we have to extract the field
                                     // values in `fields` from the json and store it
@@ -402,7 +391,11 @@ impl GraphLoader {
                                 }
                             }
 
-                            insert_vertex_clone(&vertex_ids, &mut vertex_json, &vertex_global_fields)?;
+                            insert_vertex_clone(
+                                &vertex_ids,
+                                &mut vertex_json,
+                                &vertex_global_fields,
+                            )?;
                         } else {
                             // This it the AQL Loading variant
                             let values = match serde_json::from_str::<CursorResult>(body) {
@@ -416,7 +409,7 @@ impl GraphLoader {
                             };
 
                             let mut fields = vec![];
-                            for mut vertex in values.result.into_iter() {           
+                            for mut vertex in values.result.into_iter() {
                                 let id = &vertex["_id"];
                                 let idstr: &String = match id {
                                     Value::String(i) => {
@@ -436,7 +429,6 @@ impl GraphLoader {
                                 if load_config_clone.load_all_vertex_attributes {
                                     vertex.as_object_mut().unwrap().remove("_id");
                                     vertex_json.push(vec![vertex]);
-
                                 } else {
                                     let collection_name = collection_name_from_id(idstr);
                                     fields = hashy.get(&collection_name).unwrap().clone();
@@ -543,7 +535,12 @@ impl GraphLoader {
 
     pub async fn do_edges<F>(&self, edges_function: F) -> Result<(), GraphLoaderError>
     where
-        F: Fn(&Vec<Vec<u8>>, &Vec<Vec<u8>>, &mut Vec<Vec<Value>>, &Vec<String>) -> Result<(), GraphLoaderError>
+        F: Fn(
+                &Vec<Vec<u8>>,
+                &Vec<Vec<u8>>,
+                &mut Vec<Vec<Value>>,
+                &Vec<String>,
+            ) -> Result<(), GraphLoaderError>
             + Send
             + Sync
             + Clone
@@ -566,7 +563,7 @@ impl GraphLoader {
                 while let Some(resp) = receiver.blocking_recv() {
                     let body = std::str::from_utf8(resp.as_ref())
                         .map_err(|e| format!("UTF8 error when parsing body: {:?}", e))?;
-                    
+
                     let mut froms: Vec<Vec<u8>> = Vec::with_capacity(1000000);
                     let mut tos: Vec<Vec<u8>> = Vec::with_capacity(1000000);
                     let mut edge_json: Vec<Vec<Value>> = Vec::with_capacity(400000);
@@ -650,7 +647,6 @@ impl GraphLoader {
 
                                 // edge_json.push(cols);
                             }
-
                         }
 
                         insert_edge_clone(&froms, &tos, &mut edge_json, &edge_global_fields)?;
@@ -740,7 +736,6 @@ impl GraphLoader {
                         // insert_edge_clone(&froms, &tos, &mut edge_json, &fields)?;
                         insert_edge_clone(&froms, &tos, &mut edge_json, &Vec::<String>::new())?;
                     }
-
                 }
                 Ok(())
             });
@@ -816,7 +811,6 @@ impl GraphLoader {
         Ok(())
     }
 
-    
     pub fn get_vertex_collections_as_list(&self) -> Vec<String> {
         self.v_collections.keys().cloned().collect()
     }
