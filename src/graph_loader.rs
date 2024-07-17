@@ -930,7 +930,7 @@ async fn fetch_edge_and_vertex_collections_by_graph(
         .build();
     let client = build_client(&client_config)?;
 
-    let resp = handle_auth(client.get(url), &db_config)
+    let resp = handle_auth(client.get(url), db_config)
         .send()
         .await;
 
