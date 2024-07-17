@@ -66,6 +66,7 @@ jobs:
           environment:
             STARTER_MODE: << parameters.db-mode >>
             DOCKER_IMAGE: docker.io/arangodb/arangodb:<< parameters.db-version >>
+            ARANGODB_DB_URL: http://172.28.0.1:8529
       - run:
           name: Cargo Test
           command: cargo test

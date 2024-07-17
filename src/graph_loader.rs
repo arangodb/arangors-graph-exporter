@@ -929,8 +929,11 @@ async fn fetch_edge_and_vertex_collections_by_graph(
         .tls_cert_opt(db_config.tls_cert.clone())
         .build();
     let client = build_client(&client_config)?;
-    let jwt_token = &db_config.jwt_token;
-    let resp = client.get(url).bearer_auth(jwt_token).send().await;
+
+    let resp = handle_auth(client.get(url), &db_config)
+        .send()
+        .await;
+
     let parsed_response =
         handle_arangodb_response_with_parsed_body::<serde_json::Value>(resp, StatusCode::OK)
             .await?;
