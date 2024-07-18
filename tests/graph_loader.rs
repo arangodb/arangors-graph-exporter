@@ -8,6 +8,7 @@ use serial_test::serial;
 
 use arangors::connection::Version;
 use lightning::errors::GraphLoaderError;
+use rstest::fixture;
 use serde_json::Value;
 use std::env;
 
@@ -37,6 +38,18 @@ fn build_load_config() -> DataLoadConfiguration {
     DataLoadConfigurationBuilder::new()
         .parallelism(8)
         .batch_size(100000)
+        .build()
+}
+
+fn build_load_config_with_v_with_e(
+    fetch_all_v_attributes: bool,
+    fetch_all_e_attributes: bool,
+) -> DataLoadConfiguration {
+    DataLoadConfigurationBuilder::new()
+        .parallelism(8)
+        .batch_size(100000)
+        .load_all_vertex_attributes(fetch_all_v_attributes)
+        .load_all_edge_attributes(fetch_all_e_attributes)
         .build()
 }
 
@@ -179,6 +192,57 @@ async fn init_custom_graph_loader() {
     }
     assert!(graph_loader_res.is_ok());
     teardown().await;
+}
+
+#[fixture]
+fn generate_collection_load_combinations() -> Vec<(bool, bool)> {
+    let mut combinations = vec![];
+    for &a in &[true, false] {
+        for &b in &[true, false] {
+            combinations.push((a, b));
+        }
+    }
+    combinations
+}
+
+#[tokio::test]
+#[serial]
+async fn init_custom_graph_loader_with_fields_and_fetch_all_attributes_false() {
+    let test_variants: Vec<(bool, bool)> = generate_collection_load_combinations();
+
+    for (fetch_all_v_attributes, fetch_all_e_attributes) in test_variants {
+        setup().await;
+
+        let vertex_fields = vec![];
+        let edge_fields = vec![];
+
+        let db_config = build_db_config();
+        let load_config =
+            build_load_config_with_v_with_e(fetch_all_v_attributes, fetch_all_e_attributes);
+        let vertex_collection_info = vec![CollectionInfo {
+            name: VERTEX_COLLECTION.to_string(),
+            fields: vertex_fields,
+        }];
+        let edge_collection_info = vec![CollectionInfo {
+            name: EDGE_COLLECTION.to_string(),
+            fields: edge_fields,
+        }];
+
+        let graph_loader_res = GraphLoader::new_custom(
+            db_config,
+            load_config,
+            vertex_collection_info,
+            edge_collection_info,
+        )
+        .await;
+
+        if let Err(ref e) = graph_loader_res {
+            println!("{:?}", e);
+        }
+        // in case we never define specific fields (CollectionInfo), it should always pass
+        assert!(graph_loader_res.is_ok());
+        teardown().await;
+    }
 }
 
 #[tokio::test]
