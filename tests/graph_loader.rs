@@ -6,6 +6,8 @@ use lightning::{
 };
 use serial_test::serial;
 
+use lightning::errors::GraphLoaderError;
+use serde_json::Value;
 use std::env;
 
 static GRAPH: &str = "IntegrationTestGraph";
@@ -144,6 +146,50 @@ async fn init_custom_graph_loader() {
         println!("{:?}", e);
     }
     assert!(graph_loader_res.is_ok());
+    teardown().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn init_empty_custom_graph_loader() {
+    setup().await;
+    let db_config = build_db_config();
+    let load_config = build_load_config();
+
+    let graph_loader_res = GraphLoader::new_custom(db_config, load_config, vec![], vec![]).await;
+
+    if let Err(ref e) = graph_loader_res {
+        println!("{:?}", e);
+    }
+    assert!(graph_loader_res.is_ok());
+
+    let graph_loader = graph_loader_res.unwrap();
+    let handle_vertices =
+        move |_vertex_keys: &Vec<Vec<u8>>,
+              _vertex_json: &mut Vec<Vec<Value>>,
+              _vertex_field_names: &Vec<String>| { Ok(()) };
+    let vertices_result = graph_loader.do_vertices(handle_vertices).await;
+    assert!(vertices_result.is_err());
+    match vertices_result {
+        Err(GraphLoaderError::Other(ref msg)) if msg.contains("No vertex shards found!") => {
+            assert!(true)
+        }
+        _ => assert!(false),
+    }
+
+    let handle_edges = move |_from_ids: &Vec<Vec<u8>>,
+                             _to_ids: &Vec<Vec<u8>>,
+                             _json: &mut Vec<Vec<Value>>,
+                             _fields: &Vec<String>| { Ok(()) };
+    let edges_result = graph_loader.do_edges(handle_edges).await;
+    assert!(edges_result.is_err());
+    match edges_result {
+        Err(GraphLoaderError::Other(ref msg)) if msg.contains("No edge shards found!") => {
+            assert!(true)
+        }
+        _ => assert!(false),
+    }
+
     teardown().await;
 }
 
