@@ -314,7 +314,9 @@ async fn init_empty_custom_graph_loader() {
     if is_cluster && (major > 3 || (major == 3 && minor >= 12)) {
         assert!(vertices_result.is_err());
         match vertices_result {
-            Err(GraphLoaderError::Other(ref msg)) if msg.contains("No vertex shards found!") => {
+            Err(GraphLoaderError::Other(ref msg))
+                if msg.contains("No vertex collections given!") =>
+            {
                 assert!(true)
             }
             _ => assert!(false),
