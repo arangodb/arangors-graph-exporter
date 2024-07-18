@@ -311,18 +311,26 @@ async fn init_empty_custom_graph_loader() {
               _vertex_field_names: &Vec<String>| { Ok(()) };
     let vertices_result = graph_loader.do_vertices(handle_vertices).await;
 
-    if is_cluster && (major > 3 || (major == 3 && minor >= 12)) {
-        assert!(vertices_result.is_err());
-        match vertices_result {
-            Err(GraphLoaderError::Other(ref msg))
-                if msg.contains("No vertex collections given!") =>
-            {
-                assert!(true)
+    println!("----------------");
+    println!("{}", is_cluster);
+    println!("----------------");
+    if let Err(ref e) = vertices_result {
+        println!("{:?}", e);
+    }
+    if is_cluster {
+        if major > 3 || (major == 3 && minor >= 12) {
+            assert!(vertices_result.is_err());
+            match vertices_result {
+                Err(GraphLoaderError::Other(ref msg))
+                    if msg.contains("No vertex collections given!") =>
+                {
+                    assert!(true)
+                }
+                _ => assert!(false),
             }
-            _ => assert!(false),
         }
     } else {
-        if major > 3 || (major == 3 && minor >= 12) {
+        if major > 3 || (major == 3 && minor >= 11) {
             // uses dump endpoint, must fail
             assert!(vertices_result.is_err());
         } else {
@@ -331,9 +339,6 @@ async fn init_empty_custom_graph_loader() {
             assert!(vertices_result.is_ok());
         }
     }
-    if let Err(ref e) = vertices_result {
-        println!("{:?}", e);
-    }
 
     let handle_edges = move |_from_ids: &Vec<Vec<u8>>,
                              _to_ids: &Vec<Vec<u8>>,
@@ -341,13 +346,15 @@ async fn init_empty_custom_graph_loader() {
                              _fields: &Vec<String>| { Ok(()) };
     let edges_result = graph_loader.do_edges(handle_edges).await;
 
-    if is_cluster && (major > 3 || (major == 3 && minor >= 12)) {
-        assert!(edges_result.is_err());
-        match edges_result {
-            Err(GraphLoaderError::Other(ref msg)) if msg.contains("No edge shards found!") => {
-                assert!(true)
+    if is_cluster {
+        if major > 3 || (major == 3 && minor >= 11) {
+            assert!(edges_result.is_err());
+            match edges_result {
+                Err(GraphLoaderError::Other(ref msg)) if msg.contains("No edge shards found!") => {
+                    assert!(true)
+                }
+                _ => assert!(false),
             }
-            _ => assert!(false),
         }
     } else {
         if major > 3 || (major == 3 && minor >= 12) {
