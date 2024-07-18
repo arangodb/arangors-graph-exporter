@@ -311,9 +311,6 @@ async fn init_empty_custom_graph_loader() {
               _vertex_field_names: &Vec<String>| { Ok(()) };
     let vertices_result = graph_loader.do_vertices(handle_vertices).await;
 
-    println!("----------------");
-    println!("{}", is_cluster);
-    println!("----------------");
     if let Err(ref e) = vertices_result {
         println!("{:?}", e);
     }
