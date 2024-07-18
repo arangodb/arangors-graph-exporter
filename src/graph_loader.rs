@@ -484,6 +484,12 @@ impl GraphLoader {
 
             match &self.load_strategy {
                 Some(LoadStrategy::Dump) => {
+                    if self.v_collections.is_empty() {
+                        error!("No vertex collections given!");
+                        return Err(GraphLoaderError::from(
+                            "No vertex collections given!".to_string(),
+                        ));
+                    }
                     if self.vertex_map.is_empty() {
                         error!("No vertex shards found!");
                         return Err(GraphLoaderError::from(
