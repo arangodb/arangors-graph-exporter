@@ -637,37 +637,36 @@ impl GraphLoader {
                                 edge.as_object_mut().unwrap().remove("_to");
                                 edge_json.push(vec![edge]);
                             } else {
-                                panic!("Not implemented yet");
-                                // let id = &edge["_id"];
-                                // let idstr: &String = match id {
-                                //     Value::String(i) => i,
-                                //     _ => {
-                                //         return Err(GraphLoaderError::JsonParseError(format!(
-                                //             "JSON is no object with a string _id attribute:\n{}",
-                                //             line
-                                //         )));
-                                //     }
-                                // };
+                                let id = &edge["_id"];
+                                let idstr: &String = match id {
+                                    Value::String(i) => i,
+                                    _ => {
+                                        return Err(GraphLoaderError::JsonParseError(format!(
+                                            "JSON is no object with a string _id attribute:\n{}",
+                                            line
+                                        )));
+                                    }
+                                };
 
-                                // // If we get here, we have to extract the field
-                                // // values in `fields` from the json and store it
-                                // // to edge_json:
-                                // let get_value = |v: &Value, field: &str| -> Value {
-                                //     if field == "@collection_name" {
-                                //         Value::String(collection_name_from_id(idstr))
-                                //     } else {
-                                //         v[field].clone()
-                                //     }
-                                // };
+                                // If we get here, we have to extract the field
+                                // values in `fields` from the json and store it
+                                // to edge_json:
+                                let get_value = |v: &Value, field: &str| -> Value {
+                                    if field == "@collection_name" {
+                                        Value::String(collection_name_from_id(idstr))
+                                    } else {
+                                        v[field].clone()
+                                    }
+                                };
 
-                                // let mut cols: Vec<Value> =
-                                //     Vec::with_capacity(edge_global_fields.len());
-                                // for f in edge_global_fields.iter() {
-                                //     let j = get_value(&edge, f);
-                                //     cols.push(j);
-                                // }
+                                let mut cols: Vec<Value> =
+                                    Vec::with_capacity(edge_global_fields.len());
+                                for f in edge_global_fields.iter() {
+                                    let j = get_value(&edge, f);
+                                    cols.push(j);
+                                }
 
-                                // edge_json.push(cols);
+                                edge_json.push(cols);
                             }
                         }
 
