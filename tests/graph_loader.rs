@@ -6,6 +6,7 @@ use lightning::{
 };
 use serial_test::serial;
 
+use arangors::connection::Version;
 use lightning::errors::GraphLoaderError;
 use serde_json::Value;
 use std::env;
@@ -49,6 +50,37 @@ async fn is_cluster() -> bool {
         return true;
     }
     false
+}
+
+async fn get_arangodb_version() -> Version {
+    let conn = Connection::establish_basic_auth(DATABASE_URL, USERNAME, PASSWORD)
+        .await
+        .unwrap();
+    let db = conn.db(DATABASE).await.unwrap();
+    db.arango_version().await.unwrap()
+}
+
+fn extract_version_parts(version: &str) -> Result<(u32, u32, u32), &'static str> {
+    let version_part = version.split('-').next().ok_or("Invalid version string")?;
+    let mut parts = version_part.split('.');
+
+    let major = parts
+        .next()
+        .ok_or("Missing major version")?
+        .parse()
+        .map_err(|_| "Invalid major version")?;
+    let minor = parts
+        .next()
+        .ok_or("Missing minor version")?
+        .parse()
+        .map_err(|_| "Invalid minor version")?;
+    let patch = parts
+        .next()
+        .ok_or("Missing patch version")?
+        .parse()
+        .map_err(|_| "Invalid patch version")?;
+
+    Ok((major, minor, patch))
 }
 
 async fn create_graph() {
@@ -171,7 +203,9 @@ async fn init_empty_custom_graph_loader() {
               _vertex_field_names: &Vec<String>| { Ok(()) };
     let vertices_result = graph_loader.do_vertices(handle_vertices).await;
     assert!(vertices_result.is_err());
-    if is_cluster {
+    let version_str = get_arangodb_version().await.version;
+    let (major, minor, _) = extract_version_parts(&version_str).unwrap();
+    if is_cluster && (major > 3 || (major == 3 && minor >= 12)) {
         match vertices_result {
             Err(GraphLoaderError::Other(ref msg)) if msg.contains("No vertex shards found!") => {
                 assert!(true)
@@ -186,7 +220,7 @@ async fn init_empty_custom_graph_loader() {
                              _fields: &Vec<String>| { Ok(()) };
     let edges_result = graph_loader.do_edges(handle_edges).await;
     assert!(edges_result.is_err());
-    if is_cluster {
+    if is_cluster && (major > 3 || (major == 3 && minor >= 12)) {
         match edges_result {
             Err(GraphLoaderError::Other(ref msg)) if msg.contains("No edge shards found!") => {
                 assert!(true)
