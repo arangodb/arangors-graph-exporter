@@ -207,12 +207,11 @@ fn generate_collection_load_combinations() -> Vec<(bool, bool)> {
 
 #[tokio::test]
 #[serial]
-async fn init_custom_graph_loader_with_fields_and_fetch_all_attributes_false() {
+async fn init_custom_graph_loader_with_fields_and_fetch_all_attributes_positive() {
     let test_variants: Vec<(bool, bool)> = generate_collection_load_combinations();
+    setup().await;
 
     for (fetch_all_v_attributes, fetch_all_e_attributes) in test_variants {
-        setup().await;
-
         let vertex_fields = vec![];
         let edge_fields = vec![];
 
@@ -241,8 +240,51 @@ async fn init_custom_graph_loader_with_fields_and_fetch_all_attributes_false() {
         }
         // in case we never define specific fields (CollectionInfo), it should always pass
         assert!(graph_loader_res.is_ok());
-        teardown().await;
     }
+    teardown().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn init_custom_graph_loader_with_fields_and_fetch_all_attributes_negative() {
+    setup().await;
+    let test_variants: Vec<(bool, bool)> = generate_collection_load_combinations();
+
+    for (fetch_all_v_attributes, fetch_all_e_attributes) in test_variants {
+        let vertex_fields = vec!["_id".to_string()];
+        let edge_fields = vec!["_key".to_string()];
+
+        let db_config = build_db_config();
+        let load_config =
+            build_load_config_with_v_with_e(fetch_all_v_attributes, fetch_all_e_attributes);
+        let vertex_collection_info = vec![CollectionInfo {
+            name: VERTEX_COLLECTION.to_string(),
+            fields: vertex_fields,
+        }];
+        let edge_collection_info = vec![CollectionInfo {
+            name: EDGE_COLLECTION.to_string(),
+            fields: edge_fields,
+        }];
+
+        let graph_loader_res = GraphLoader::new_custom(
+            db_config,
+            load_config,
+            vertex_collection_info,
+            edge_collection_info,
+        )
+        .await;
+
+        if let Err(ref e) = graph_loader_res {
+            println!("{:?}", e);
+        }
+        // in case we never define specific fields (CollectionInfo), it should always pass
+        if fetch_all_v_attributes || fetch_all_e_attributes {
+            assert!(graph_loader_res.is_err());
+        } else {
+            assert!(graph_loader_res.is_ok());
+        }
+    }
+    teardown().await;
 }
 
 #[tokio::test]

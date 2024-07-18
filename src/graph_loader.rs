@@ -192,7 +192,29 @@ impl GraphLoader {
         Ok(())
     }
 
+    fn verify_parameters(&self) -> Result<(), GraphLoaderError> {
+        if !self.get_all_vertices_fields_as_list().is_empty()
+            && self.load_config.load_all_vertex_attributes
+        {
+            return Err(GraphLoaderError::from(
+                "load_all_vertex_attributes is set to true, but vertex collections are not empty."
+                    .to_string(),
+            ));
+        }
+        if !self.get_all_edges_fields_as_list().is_empty()
+            && self.load_config.load_all_edge_attributes
+        {
+            return Err(GraphLoaderError::from(
+                "load_all_edge_attributes is set to true, but edge collections are not empty."
+                    .to_string(),
+            ));
+        }
+        Ok(())
+    }
+
     async fn initialize(&mut self) -> Result<(), GraphLoaderError> {
+        self.verify_parameters()?;
+
         let use_tls = self.db_config.endpoints[0].starts_with("https://");
         let client_config = ClientConfig::builder()
             .n_retries(5)
