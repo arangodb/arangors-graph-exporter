@@ -330,7 +330,9 @@ async fn init_empty_custom_graph_loader() {
             }
         }
     } else {
-        if major > 3 || (major == 3 && minor >= 11) {
+        if major > 3 || (major == 3 && minor >= 12) {
+            // single server dump endpoint only supported from 3.12
+            // all versions below will fall back to aql.
             // uses dump endpoint, must fail
             assert!(vertices_result.is_err());
         } else {
