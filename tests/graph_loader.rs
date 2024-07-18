@@ -322,6 +322,9 @@ async fn init_empty_custom_graph_loader() {
     } else {
         // In the SingleServer case we do not have an error as we execute AQL on empty collections.
         // Means we're just not receiving any documents.
+        if let Err(ref e) = vertices_result {
+            println!("{:?}", e);
+        }
         assert!(vertices_result.is_ok());
     }
 
