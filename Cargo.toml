@@ -22,3 +22,4 @@ thiserror = "1.0.61"
 serial_test = "0.5"
 tokio = { version = "1.38.0", features = ["full"] }
 arangors = { version = "0.6" }
+rstest = "0.12.0"

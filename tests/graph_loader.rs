@@ -188,6 +188,8 @@ async fn init_empty_custom_graph_loader() {
     let is_cluster = is_cluster().await;
     let db_config = build_db_config();
     let load_config = build_load_config();
+    let version_str = get_arangodb_version().await.version;
+    let (major, minor, _) = extract_version_parts(&version_str).unwrap();
 
     let graph_loader_res = GraphLoader::new_custom(db_config, load_config, vec![], vec![]).await;
 
@@ -202,16 +204,19 @@ async fn init_empty_custom_graph_loader() {
               _vertex_json: &mut Vec<Vec<Value>>,
               _vertex_field_names: &Vec<String>| { Ok(()) };
     let vertices_result = graph_loader.do_vertices(handle_vertices).await;
-    assert!(vertices_result.is_err());
-    let version_str = get_arangodb_version().await.version;
-    let (major, minor, _) = extract_version_parts(&version_str).unwrap();
+
     if is_cluster && (major > 3 || (major == 3 && minor >= 12)) {
+        assert!(vertices_result.is_err());
         match vertices_result {
             Err(GraphLoaderError::Other(ref msg)) if msg.contains("No vertex shards found!") => {
                 assert!(true)
             }
             _ => assert!(false),
         }
+    } else {
+        // In the SingleServer case we do not have an error as we execute AQL on empty collections.
+        // Means we're just not receiving any documents.
+        assert!(vertices_result.is_ok());
     }
 
     let handle_edges = move |_from_ids: &Vec<Vec<u8>>,
@@ -219,14 +224,19 @@ async fn init_empty_custom_graph_loader() {
                              _json: &mut Vec<Vec<Value>>,
                              _fields: &Vec<String>| { Ok(()) };
     let edges_result = graph_loader.do_edges(handle_edges).await;
-    assert!(edges_result.is_err());
+
     if is_cluster && (major > 3 || (major == 3 && minor >= 12)) {
+        assert!(edges_result.is_err());
         match edges_result {
             Err(GraphLoaderError::Other(ref msg)) if msg.contains("No edge shards found!") => {
                 assert!(true)
             }
             _ => assert!(false),
         }
+    } else {
+        // In the SingleServer case we do not have an error as we execute AQL on empty collections.
+        // Means we're just not receiving any documents.
+        assert!(edges_result.is_ok());
     }
 
     teardown().await;
