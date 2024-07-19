@@ -208,10 +208,10 @@ async fn init_named_graph_loader_with_data() {
     // in this case, no global vertex attributes have been requested
     // therefore only the _key attribute is loaded for vertex documents
     let graph_loader = graph_loader_res.unwrap();
-    let handle_vertices = move |vertex_keys: &Vec<Vec<u8>>,
+    let handle_vertices = move |vertex_ids: &Vec<Vec<u8>>,
                                 columns: &mut Vec<Vec<Value>>,
                                 vertex_field_names: &Vec<String>| {
-        assert_eq!(vertex_keys.len(), 10);
+        assert_eq!(vertex_ids.len(), 10);
 
         assert_eq!(columns.len(), 10);
         for (v_index, vertex) in columns.iter().enumerate() {
@@ -229,6 +229,34 @@ async fn init_named_graph_loader_with_data() {
     };
     let vertices_result = graph_loader.do_vertices(handle_vertices).await;
     assert!(vertices_result.is_ok());
+
+    let handle_edges = move |from_ids: &Vec<Vec<u8>>,
+                             to_ids: &Vec<Vec<u8>>,
+                             columns: &mut Vec<Vec<Value>>,
+                             edge_field_names: &Vec<String>| {
+        assert_eq!(from_ids.len(), 9);
+        assert_eq!(from_ids.len(), to_ids.len());
+        assert_eq!(columns.len(), 10);
+
+        for (v_index, edge) in columns.iter().enumerate() {
+            assert_eq!(edge.len(), 2);
+            assert_eq!(edge.len(), edge_field_names.len());
+            let element_0 = &edge[0];
+            let from_id = element_0.as_str().unwrap();
+            let to_id = &edge[1].as_str().unwrap();
+            let expected_from_id = format!("{}/{}", VERTEX_COLLECTION, v_index);
+            let expected_to_id = format!("{}/{}", VERTEX_COLLECTION, v_index + 1);
+            assert_eq!(from_id.to_string(), expected_from_id);
+            assert_eq!(to_id.to_string(), expected_to_id);
+        }
+
+        assert_eq!(edge_field_names.len(), 1);
+        assert_eq!(edge_field_names[0], "_from");
+        assert_eq!(edge_field_names[1], "_to");
+        Ok(())
+    };
+    let edges_result = graph_loader.do_edges(handle_edges).await;
+    assert!(edges_result.is_ok());
 
     teardown().await;
 }

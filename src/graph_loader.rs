@@ -567,7 +567,6 @@ impl GraphLoader {
             let edge_global_fields = self.get_all_edges_fields_as_list();
             let insert_edge_clone = edges_function.clone();
             let strategy_clone = self.load_strategy;
-            let hashy: HashMap<String, Vec<String>> = self.get_all_edges_fields_as_hashmap();
             let load_config_clone = self.load_config.clone();
 
             let consumer = std::thread::spawn(move || -> Result<(), GraphLoaderError> {
@@ -672,7 +671,6 @@ impl GraphLoader {
                             Ok(val) => val,
                         };
 
-                        let mut fields = vec![];
                         for mut edge in values.result.into_iter() {
                             let from = &edge["_from"];
                             match from {
@@ -720,9 +718,6 @@ impl GraphLoader {
                                     }
                                 };
 
-                                let collection_name = collection_name_from_id(idstr);
-                                fields = hashy.get(&collection_name).unwrap().clone();
-
                                 // If we get here, we have to extract the field
                                 // values in `fields` from the json and store it
                                 // to edge_json:
@@ -734,8 +729,9 @@ impl GraphLoader {
                                     }
                                 };
 
-                                let mut cols: Vec<Value> = Vec::with_capacity(fields.len());
-                                for f in fields.iter() {
+                                let mut cols: Vec<Value> =
+                                    Vec::with_capacity(edge_global_fields.len());
+                                for f in edge_global_fields.iter() {
                                     let j = get_value(&edge, f);
                                     cols.push(j);
                                 }
@@ -743,7 +739,7 @@ impl GraphLoader {
                             }
                         }
 
-                        insert_edge_clone(&froms, &tos, &mut edge_json, &fields)?;
+                        insert_edge_clone(&froms, &tos, &mut edge_json, &edge_global_fields)?;
                     }
                 }
                 Ok(())
@@ -844,7 +840,7 @@ impl GraphLoader {
             unique_fields.insert(fields);
         }
 
-        if unique_fields.is_empty() && self.load_config.load_all_vertex_attributes == false {
+        if unique_fields.is_empty() && !self.load_config.load_all_vertex_attributes {
             unique_fields.insert("_id".to_string());
         }
 
@@ -858,7 +854,7 @@ impl GraphLoader {
             unique_fields.insert(fields);
         }
 
-        if unique_fields.is_empty() && self.load_config.load_all_edge_attributes == false {
+        if unique_fields.is_empty() && !self.load_config.load_all_edge_attributes {
             unique_fields.insert("_from".to_string());
             unique_fields.insert("_to".to_string());
         }
