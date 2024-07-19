@@ -344,17 +344,35 @@ async fn init_named_graph_loader_with_data_all_v_and_e_attributes() {
             assert_eq!(to_id_str, format!("{}/{}", VERTEX_COLLECTION, e_index + 1));
         }
 
+        for (e_index, to_id) in to_ids.iter().enumerate() {
+            let from_id_str = from_ids[e_index]
+                .iter()
+                .map(|x| *x as char)
+                .collect::<String>();
+            let to_id_str = to_id.iter().map(|x| *x as char).collect::<String>();
+            assert_eq!(from_id_str, format!("{}/{}", VERTEX_COLLECTION, e_index));
+            assert_eq!(to_id_str, format!("{}/{}", VERTEX_COLLECTION, e_index + 1));
+        }
+
         for (e_index, edge) in columns.iter().enumerate() {
-            print!("{:?}", edge);
             assert_eq!(edge.len(), 3);
             assert_eq!(edge.len(), edge_field_names.len());
-            let element_0 = &edge[0];
-            let from_id = element_0.as_str().unwrap();
-            let to_id = &edge[1].as_str().unwrap();
-            let expected_from_id = format!("{}/{}", VERTEX_COLLECTION, e_index);
-            let expected_to_id = format!("{}/{}", VERTEX_COLLECTION, e_index + 1);
-            assert_eq!(from_id.to_string(), expected_from_id);
-            assert_eq!(to_id.to_string(), expected_to_id);
+
+            let x = &edge[get_attribute_position(edge_field_names, "x")]
+                .as_u64()
+                .unwrap();
+            let y = &edge[get_attribute_position(edge_field_names, "y")]
+                .as_u64()
+                .unwrap();
+            let z = &edge[get_attribute_position(edge_field_names, "z")]
+                .as_u64()
+                .unwrap();
+            let expected_x_value = (e_index + 1) as u64;
+            let expected_y_value = (e_index + 2) as u64;
+            let expected_z_value = (e_index + 3) as u64;
+            assert_eq!(x, &expected_x_value);
+            assert_eq!(y, &expected_y_value);
+            assert_eq!(z, &expected_z_value);
         }
 
         assert_eq!(edge_field_names.len(), 3);
