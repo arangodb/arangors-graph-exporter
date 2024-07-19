@@ -8,7 +8,6 @@ use crate::sharding::{compute_faked_shard_map, compute_shard_map};
 use crate::types::info::{DeploymentType, LoadStrategy, SupportInfo, VersionInformation};
 use crate::{DataLoadConfiguration, DatabaseConfiguration};
 use bytes::Bytes;
-use core::panic;
 use log::{debug, error, info};
 use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
@@ -731,7 +730,7 @@ impl GraphLoader {
                                     }
                                 };
 
-                                let collection_name = collection_name_from_id(&idstr);
+                                let collection_name = collection_name_from_id(idstr);
                                 fields = hashy.get(&collection_name).unwrap().clone();
 
                                 // If we get here, we have to extract the field
