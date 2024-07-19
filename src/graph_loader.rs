@@ -193,11 +193,7 @@ impl GraphLoader {
     }
 
     fn verify_parameters(&self) -> Result<(), GraphLoaderError> {
-        let vertex_fields = self.get_all_vertices_fields_as_list();
-        let vertex_fields_only_has_collection_name =
-            vertex_fields.len() == 1 && vertex_fields[0] == "@collection_name";
-
-        if !(vertex_fields.is_empty() || vertex_fields_only_has_collection_name)
+        if !self.get_all_vertices_fields_as_list().is_empty()
             && self.load_config.load_all_vertex_attributes
         {
             return Err(GraphLoaderError::from(
@@ -205,12 +201,7 @@ impl GraphLoader {
                     .to_string(),
             ));
         }
-
-        let edge_fields = self.get_all_edges_fields_as_list();
-        let edge_fields_only_has_collection_name =
-            edge_fields.len() == 1 && edge_fields[0] == "@collection_name";
-
-        if !(edge_fields.is_empty() || edge_fields_only_has_collection_name)
+        if !self.get_all_edges_fields_as_list().is_empty()
             && self.load_config.load_all_edge_attributes
         {
             return Err(GraphLoaderError::from(
