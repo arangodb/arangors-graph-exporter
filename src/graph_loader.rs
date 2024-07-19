@@ -297,6 +297,7 @@ impl GraphLoader {
         load_config: DataLoadConfiguration,
         graph_name: String,
         vertex_global_fields: Option<Vec<String>>,
+        edge_global_fields: Option<Vec<String>>,
     ) -> Result<GraphLoader, GraphLoaderError> {
         let vertex_coll_list;
         let edge_coll_list;
@@ -315,7 +316,7 @@ impl GraphLoader {
                     .iter()
                     .map(|c| CollectionInfo {
                         name: c.clone(),
-                        fields: vec![],
+                        fields: edge_global_fields.clone().unwrap_or_default(),
                     })
                     .collect();
             }

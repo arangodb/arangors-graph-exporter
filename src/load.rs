@@ -8,8 +8,16 @@ pub async fn load_named_graph(
     load_config: DataLoadConfiguration,
     graph_name: String,
     vertex_global_fields: Option<Vec<String>>,
+    edge_global_fields: Option<Vec<String>>,
 ) -> Result<GraphLoader, GraphLoaderError> {
-    GraphLoader::new_named(db_config, load_config, graph_name, vertex_global_fields).await
+    GraphLoader::new_named(
+        db_config,
+        load_config,
+        graph_name,
+        vertex_global_fields,
+        edge_global_fields,
+    )
+    .await
 }
 
 pub async fn load_custom_graph(

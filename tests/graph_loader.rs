@@ -129,7 +129,7 @@ async fn create_graph(insert_data: bool) {
             let key_string = i.to_string();
             vertex_collection
                 .create_document(
-                    serde_json::json!({"_key": key_string, "x": i, "y": i, "z": i}),
+                    serde_json::json!({"_key": key_string, "x": i + 1, "y": i + 2, "z": i + 3}),
                     insert_options.clone(),
                 )
                 .await
@@ -142,7 +142,7 @@ async fn create_graph(insert_data: bool) {
             let key = i.to_string();
             edge_collection
                 .create_document(
-                    serde_json::json!({"_from": from_id, "_to": to_id, "_key": key, "x": i, "y": i, "z": i}),
+                    serde_json::json!({"_from": from_id, "_to": to_id, "_key": key, "x": i + 1, "y": i + 2, "z": i + 3}),
                     insert_options.clone(),
                 )
                 .await
@@ -180,7 +180,7 @@ async fn init_named_graph_loader() {
     let load_config = build_load_config();
 
     let graph_loader_res =
-        GraphLoader::new_named(db_config, load_config, GRAPH.to_string(), None).await;
+        GraphLoader::new_named(db_config, load_config, GRAPH.to_string(), None, None).await;
     if let Err(ref e) = graph_loader_res {
         println!("{:?}", e);
     }
@@ -197,7 +197,7 @@ async fn init_named_graph_loader_with_data() {
     let load_config = build_load_config();
 
     let graph_loader_res =
-        GraphLoader::new_named(db_config, load_config, GRAPH.to_string(), None).await;
+        GraphLoader::new_named(db_config, load_config, GRAPH.to_string(), None, None).await;
     if let Err(ref e) = graph_loader_res {
         println!("{:?}", e);
     }
@@ -261,14 +261,128 @@ async fn init_named_graph_loader_with_data() {
     teardown().await;
 }
 
+fn get_attribute_position(field_names: &Vec<String>, attribute: &str) -> usize {
+    field_names.iter().position(|x| x == attribute).unwrap()
+}
+
+#[tokio::test]
+#[serial]
+async fn init_named_graph_loader_with_data_all_v_and_e_attributes() {
+    setup(true).await;
+    let db_config = build_db_config();
+    let load_config = build_load_config();
+    let global_fields = vec!["x".to_string(), "y".to_string(), "z".to_string()];
+    let graph_loader_res = GraphLoader::new_named(
+        db_config,
+        load_config,
+        GRAPH.to_string(),
+        Some(global_fields.clone()),
+        Some(global_fields),
+    )
+    .await;
+    if let Err(ref e) = graph_loader_res {
+        println!("{:?}", e);
+    }
+
+    assert!(graph_loader_res.is_ok());
+
+    // check that data is loaded.
+    // in this case, no global vertex attributes have been requested
+    // therefore only the _key attribute is loaded for vertex documents
+    let graph_loader = graph_loader_res.unwrap();
+    let handle_vertices = move |vertex_ids: &Vec<Vec<u8>>,
+                                columns: &mut Vec<Vec<Value>>,
+                                vertex_field_names: &Vec<String>| {
+        assert_eq!(vertex_ids.len(), 10);
+
+        assert_eq!(columns.len(), 10);
+        for (v_index, vertex) in columns.iter().enumerate() {
+            assert_eq!(vertex.len(), 3);
+            assert_eq!(vertex.len(), vertex_field_names.len());
+
+            let x = &vertex[get_attribute_position(vertex_field_names, "x")]
+                .as_u64()
+                .unwrap();
+            let y = &vertex[get_attribute_position(vertex_field_names, "y")]
+                .as_u64()
+                .unwrap();
+            let z = &vertex[get_attribute_position(vertex_field_names, "z")]
+                .as_u64()
+                .unwrap();
+            let expected_x_value = (v_index + 1) as u64;
+            let expected_y_value = (v_index + 2) as u64;
+            let expected_z_value = (v_index + 3) as u64;
+            assert_eq!(x, &expected_x_value);
+            assert_eq!(y, &expected_y_value);
+            assert_eq!(z, &expected_z_value);
+        }
+
+        assert_eq!(vertex_field_names.len(), 3);
+        assert!(vertex_field_names.contains(&"x".to_string()));
+        assert!(vertex_field_names.contains(&"y".to_string()));
+        assert!(vertex_field_names.contains(&"z".to_string()));
+        Ok(())
+    };
+    let vertices_result = graph_loader.do_vertices(handle_vertices).await;
+    assert!(vertices_result.is_ok());
+
+    let handle_edges = move |from_ids: &Vec<Vec<u8>>,
+                             to_ids: &Vec<Vec<u8>>,
+                             columns: &mut Vec<Vec<Value>>,
+                             edge_field_names: &Vec<String>| {
+        assert_eq!(from_ids.len(), 9);
+        assert_eq!(from_ids.len(), to_ids.len());
+        assert_eq!(columns.len(), 9);
+
+        for (e_index, from_id) in from_ids.iter().enumerate() {
+            let from_id_str = from_id.iter().map(|x| *x as char).collect::<String>();
+            let to_id_str = to_ids[e_index]
+                .iter()
+                .map(|x| *x as char)
+                .collect::<String>();
+            assert_eq!(from_id_str, format!("{}/{}", VERTEX_COLLECTION, e_index));
+            assert_eq!(to_id_str, format!("{}/{}", VERTEX_COLLECTION, e_index + 1));
+        }
+
+        for (e_index, edge) in columns.iter().enumerate() {
+            print!("{:?}", edge);
+            assert_eq!(edge.len(), 3);
+            assert_eq!(edge.len(), edge_field_names.len());
+            let element_0 = &edge[0];
+            let from_id = element_0.as_str().unwrap();
+            let to_id = &edge[1].as_str().unwrap();
+            let expected_from_id = format!("{}/{}", VERTEX_COLLECTION, e_index);
+            let expected_to_id = format!("{}/{}", VERTEX_COLLECTION, e_index + 1);
+            assert_eq!(from_id.to_string(), expected_from_id);
+            assert_eq!(to_id.to_string(), expected_to_id);
+        }
+
+        assert_eq!(edge_field_names.len(), 3);
+        assert!(edge_field_names.contains(&"x".to_string()));
+        assert!(edge_field_names.contains(&"y".to_string()));
+        assert!(edge_field_names.contains(&"z".to_string()));
+        Ok(())
+    };
+    let edges_result = graph_loader.do_edges(handle_edges).await;
+    assert!(edges_result.is_ok());
+
+    teardown().await;
+}
+
 #[tokio::test]
 #[serial]
 async fn init_unknown_named_graph_loader() {
     let db_config = build_db_config();
     let load_config = build_load_config();
 
-    let graph_loader_res =
-        GraphLoader::new_named(db_config, load_config, "UnknownGraph".to_string(), None).await;
+    let graph_loader_res = GraphLoader::new_named(
+        db_config,
+        load_config,
+        "UnknownGraph".to_string(),
+        None,
+        None,
+    )
+    .await;
 
     assert!(graph_loader_res.is_err());
 }
