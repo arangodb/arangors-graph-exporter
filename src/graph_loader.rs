@@ -578,7 +578,7 @@ impl GraphLoader {
             let edge_global_fields = self.get_all_edges_fields_as_list();
             let insert_edge_clone = edges_function.clone();
             let strategy_clone = self.load_strategy;
-            // let hashy: HashMap<String, Vec<String>> = self.get_all_edges_fields_as_hashmap();
+            let hashy: HashMap<String, Vec<String>> = self.get_all_edges_fields_as_hashmap();
             let load_config_clone = self.load_config.clone();
 
             let consumer = std::thread::spawn(move || -> Result<(), GraphLoaderError> {
@@ -682,6 +682,8 @@ impl GraphLoader {
                             }
                             Ok(val) => val,
                         };
+
+                        let mut fields = vec![];
                         for mut edge in values.result.into_iter() {
                             let from = &edge["_from"];
                             match from {
@@ -718,44 +720,41 @@ impl GraphLoader {
                                 edge.as_object_mut().unwrap().remove("_to");
                                 edge_json.push(vec![edge]);
                             } else {
-                                panic!("Not implemented yet");
-                                // let id: &Value = &edge["_id"];
-                                // let idstr: &String = match id {
-                                //     Value::String(i) => i,
-                                //     _ => {
-                                //         return Err(GraphLoaderError::JsonParseError(format!(
-                                //             "JSON is no object with a string _id attribute:\n{}",
-                                //             edge
-                                //         )));
-                                //     }
-                                // };
+                                let id: &Value = &edge["_id"];
+                                let idstr: &String = match id {
+                                    Value::String(i) => i,
+                                    _ => {
+                                        return Err(GraphLoaderError::JsonParseError(format!(
+                                            "JSON is no object with a string _id attribute:\n{}",
+                                            edge
+                                        )));
+                                    }
+                                };
 
-                                // let collection_name = collection_name_from_id(&idstr);
-                                // fields = hashy.get(&collection_name).unwrap().clone();
+                                let collection_name = collection_name_from_id(&idstr);
+                                fields = hashy.get(&collection_name).unwrap().clone();
 
-                                // // If we get here, we have to extract the field
-                                // // values in `fields` from the json and store it
-                                // // to edge_json:
-                                // let get_value = |v: &Value, field: &str| -> Value {
-                                //     if field == "@collection_name" {
-                                //         Value::String(collection_name_from_id(idstr))
-                                //     } else {
-                                //         v[field].clone()
-                                //     }
-                                // };
+                                // If we get here, we have to extract the field
+                                // values in `fields` from the json and store it
+                                // to edge_json:
+                                let get_value = |v: &Value, field: &str| -> Value {
+                                    if field == "@collection_name" {
+                                        Value::String(collection_name_from_id(idstr))
+                                    } else {
+                                        v[field].clone()
+                                    }
+                                };
 
-                                // let mut cols: Vec<Value> = Vec::with_capacity(fields.len());
-                                // for f in fields.iter() {
-                                //     let j = get_value(&edge, f);
-                                //     cols.push(j);
-                                // }
-                                // edge_json.push(cols);
+                                let mut cols: Vec<Value> = Vec::with_capacity(fields.len());
+                                for f in fields.iter() {
+                                    let j = get_value(&edge, f);
+                                    cols.push(j);
+                                }
+                                edge_json.push(cols);
                             }
                         }
 
-                        // TODO: Revisit **fields** for AQL Variant
-                        // insert_edge_clone(&froms, &tos, &mut edge_json, &fields)?;
-                        insert_edge_clone(&froms, &tos, &mut edge_json, &Vec::<String>::new())?;
+                        insert_edge_clone(&froms, &tos, &mut edge_json, &fields)?;
                     }
                 }
                 Ok(())
@@ -865,6 +864,13 @@ impl GraphLoader {
             unique_fields.insert(fields);
         }
         unique_fields.into_iter().collect()
+    }
+
+    pub fn get_all_edges_fields_as_hashmap(&self) -> HashMap<String, Vec<String>> {
+        self.e_collections
+            .iter()
+            .map(|(k, v)| (k.clone(), v.fields.clone()))
+            .collect()
     }
 
     pub fn produce_vertex_projections(&self) -> Option<HashMap<String, Vec<String>>> {
