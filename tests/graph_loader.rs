@@ -294,8 +294,14 @@ async fn init_named_graph_loader_with_data_all_v_and_e_attributes() {
                                 columns: &mut Vec<Vec<Value>>,
                                 vertex_field_names: &Vec<String>| {
         assert_eq!(vertex_ids.len(), 10);
-
         assert_eq!(columns.len(), 10);
+
+        for (v_index, v_id) in vertex_ids.iter().enumerate() {
+            let id = v_id.iter().map(|x| *x as char).collect::<String>();
+            let expected_id = format!("{}/{}", VERTEX_COLLECTION, v_index);
+            assert_eq!(id, expected_id);
+        }
+
         for (v_index, vertex) in columns.iter().enumerate() {
             assert_eq!(vertex.len(), 3);
             assert_eq!(vertex.len(), vertex_field_names.len());
