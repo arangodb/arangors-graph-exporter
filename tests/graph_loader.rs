@@ -7,6 +7,7 @@ use lightning::{
 use serial_test::serial;
 
 use arangors::connection::Version;
+use arangors::document::options::InsertOptions;
 use lightning::errors::GraphLoaderError;
 use rstest::fixture;
 use serde_json::Value;
@@ -96,7 +97,7 @@ fn extract_version_parts(version: &str) -> Result<(u32, u32, u32), &'static str>
     Ok((major, minor, patch))
 }
 
-async fn create_graph() {
+async fn create_graph(insert_data: bool) {
     let conn = Connection::establish_basic_auth(DATABASE_URL, USERNAME, PASSWORD)
         .await
         .unwrap();
@@ -116,6 +117,42 @@ async fn create_graph() {
     let _ = db.drop_graph(GRAPH, true).await;
     let graph_res = db.create_graph(graph, false).await;
     assert!(graph_res.is_ok());
+
+    if insert_data {
+        // creates a "line" graph with 10 vertices and 9 edges
+        // x,y,z attributes will be inserted to both vertex and edge collections
+        let vertex_collection = db.collection(VERTEX_COLLECTION).await.unwrap();
+        let edge_collection = db.collection(EDGE_COLLECTION).await.unwrap();
+
+        let insert_options = InsertOptions::builder().overwrite(true).build();
+        for i in 0..10 {
+            let key_string = i.to_string();
+            vertex_collection
+                .create_document(
+                    serde_json::json!({"_key": key_string, "x": i, "y": i, "z": i}),
+                    insert_options.clone(),
+                )
+                .await
+                .unwrap();
+        }
+
+        for i in 0..9 {
+            let from_id = VERTEX_COLLECTION.to_string() + "/" + &i.to_string();
+            let to_id = VERTEX_COLLECTION.to_string() + "/" + &(i + 1).to_string();
+            let key = i.to_string();
+            edge_collection
+                .create_document(
+                    serde_json::json!({"_from": from_id, "_to": to_id, "_key": key, "x": i, "y": i, "z": i}),
+                    insert_options.clone(),
+                )
+                .await
+                .unwrap();
+        }
+        let properties_v = vertex_collection.document_count().await.unwrap();
+        assert_eq!(properties_v.info.count, Some(10));
+        let properties_e = edge_collection.document_count().await.unwrap();
+        assert_eq!(properties_e.info.count, Some(9));
+    }
 }
 
 async fn drop_graph() {
@@ -127,8 +164,8 @@ async fn drop_graph() {
     let _ = db.drop_graph(GRAPH, true).await;
 }
 
-async fn setup() {
-    create_graph().await;
+async fn setup(insert_data: bool) {
+    create_graph(insert_data).await;
 }
 
 async fn teardown() {
@@ -138,7 +175,7 @@ async fn teardown() {
 #[tokio::test]
 #[serial]
 async fn init_named_graph_loader() {
-    setup().await;
+    setup(false).await;
     let db_config = build_db_config();
     let load_config = build_load_config();
 
@@ -149,6 +186,50 @@ async fn init_named_graph_loader() {
     }
 
     assert!(graph_loader_res.is_ok());
+    teardown().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn init_named_graph_loader_with_data() {
+    setup(true).await;
+    let db_config = build_db_config();
+    let load_config = build_load_config();
+
+    let graph_loader_res =
+        GraphLoader::new_named(db_config, load_config, GRAPH.to_string(), None).await;
+    if let Err(ref e) = graph_loader_res {
+        println!("{:?}", e);
+    }
+
+    assert!(graph_loader_res.is_ok());
+
+    // check that data is loaded.
+    // in this case, no global vertex attributes have been requested
+    // therefore only the _key attribute is loaded for vertex documents
+    let graph_loader = graph_loader_res.unwrap();
+    let handle_vertices = move |vertex_keys: &Vec<Vec<u8>>,
+                                columns: &mut Vec<Vec<Value>>,
+                                vertex_field_names: &Vec<String>| {
+        assert_eq!(vertex_keys.len(), 10);
+
+        assert_eq!(columns.len(), 10);
+        for (v_index, vertex) in columns.iter().enumerate() {
+            assert_eq!(vertex.len(), 1);
+            assert_eq!(vertex.len(), vertex_field_names.len());
+            let element_0 = &vertex[0];
+            let id = element_0.as_str().unwrap();
+            let expected_id = format!("{}/{}", VERTEX_COLLECTION, v_index);
+            assert_eq!(id.to_string(), expected_id);
+        }
+
+        assert_eq!(vertex_field_names.len(), 1);
+        assert_eq!(vertex_field_names[0], "_id");
+        Ok(())
+    };
+    let vertices_result = graph_loader.do_vertices(handle_vertices).await;
+    assert!(vertices_result.is_ok());
+
     teardown().await;
 }
 
@@ -167,7 +248,7 @@ async fn init_unknown_named_graph_loader() {
 #[tokio::test]
 #[serial]
 async fn init_custom_graph_loader() {
-    setup().await;
+    setup(false).await;
     let db_config = build_db_config();
     let load_config = build_load_config();
     let vertex_collection_info = vec![CollectionInfo {
@@ -209,7 +290,7 @@ fn generate_collection_load_combinations() -> Vec<(bool, bool)> {
 #[serial]
 async fn init_custom_graph_loader_with_fields_and_fetch_all_attributes_positive() {
     let test_variants: Vec<(bool, bool)> = generate_collection_load_combinations();
-    setup().await;
+    setup(false).await;
 
     for (fetch_all_v_attributes, fetch_all_e_attributes) in test_variants {
         let vertex_fields = vec![];
@@ -247,7 +328,7 @@ async fn init_custom_graph_loader_with_fields_and_fetch_all_attributes_positive(
 #[tokio::test]
 #[serial]
 async fn init_custom_graph_loader_with_fields_and_fetch_all_attributes_negative() {
-    setup().await;
+    setup(false).await;
     let test_variants: Vec<(bool, bool)> = generate_collection_load_combinations();
 
     for (fetch_all_v_attributes, fetch_all_e_attributes) in test_variants {
@@ -290,7 +371,7 @@ async fn init_custom_graph_loader_with_fields_and_fetch_all_attributes_negative(
 #[tokio::test]
 #[serial]
 async fn init_empty_custom_graph_loader() {
-    setup().await;
+    setup(false).await;
     let is_cluster = is_cluster().await;
     let db_config = build_db_config();
     let load_config = build_load_config();

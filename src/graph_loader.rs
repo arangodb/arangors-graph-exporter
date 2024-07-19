@@ -335,7 +335,6 @@ impl GraphLoader {
                 let vertex_global_fields = self.get_all_vertices_fields_as_list();
                 let insert_vertex_clone = vertices_function.clone();
                 let strategy_clone = self.load_strategy;
-                let hashy: HashMap<String, Vec<String>> = self.get_all_vertices_fields_as_hashmap();
                 let load_config_clone = self.load_config.clone();
 
                 let consumer = std::thread::spawn(move || -> Result<(), GraphLoaderError> {
@@ -412,12 +411,6 @@ impl GraphLoader {
                                     vertex_json.push(cols);
                                 }
                             }
-
-                            insert_vertex_clone(
-                                &vertex_ids,
-                                &mut vertex_json,
-                                &vertex_global_fields,
-                            )?;
                         } else {
                             // This it the AQL Loading variant
                             let values = match serde_json::from_str::<CursorResult>(body) {
@@ -430,7 +423,6 @@ impl GraphLoader {
                                 Ok(val) => val,
                             };
 
-                            let mut fields = vec![];
                             for mut vertex in values.result.into_iter() {
                                 let id = &vertex["_id"];
                                 let idstr: &String = match id {
@@ -452,9 +444,6 @@ impl GraphLoader {
                                     vertex.as_object_mut().unwrap().remove("_id");
                                     vertex_json.push(vec![vertex]);
                                 } else {
-                                    let collection_name = collection_name_from_id(idstr);
-                                    fields.clone_from(hashy.get(&collection_name).unwrap());
-
                                     // If we get here, we have to extract the field
                                     // values in `fields` from the json and store it
                                     // to vertex_json:
@@ -466,16 +455,17 @@ impl GraphLoader {
                                         }
                                     };
 
-                                    let mut cols: Vec<Value> = Vec::with_capacity(fields.len());
-                                    for f in fields.iter() {
+                                    let mut cols: Vec<Value> =
+                                        Vec::with_capacity(vertex_global_fields.len());
+                                    for f in vertex_global_fields.iter() {
                                         let j = get_value(&vertex, f);
                                         cols.push(j);
                                     }
                                     vertex_json.push(cols);
                                 }
                             }
-                            insert_vertex_clone(&vertex_ids, &mut vertex_json, &fields)?;
                         }
+                        insert_vertex_clone(&vertex_ids, &mut vertex_json, &vertex_global_fields)?;
                     }
                     Ok(())
                 });
@@ -855,6 +845,11 @@ impl GraphLoader {
         for fields in self.v_collections.values().flat_map(|c| c.fields.clone()) {
             unique_fields.insert(fields);
         }
+
+        if unique_fields.is_empty() && self.load_config.load_all_vertex_attributes == false {
+            unique_fields.insert("_id".to_string());
+        }
+
         unique_fields.into_iter().collect()
     }
 
@@ -864,6 +859,12 @@ impl GraphLoader {
         for fields in self.e_collections.values().flat_map(|c| c.fields.clone()) {
             unique_fields.insert(fields);
         }
+
+        if unique_fields.is_empty() && self.load_config.load_all_edge_attributes == false {
+            unique_fields.insert("_from".to_string());
+            unique_fields.insert("_to".to_string());
+        }
+
         unique_fields.into_iter().collect()
     }
 
@@ -877,11 +878,6 @@ impl GraphLoader {
         let client_wants_all_vertex_attributes = self.load_config.load_all_vertex_attributes;
         if !client_wants_all_vertex_attributes {
             let mut vertex_projections: HashMap<String, Vec<String>> = HashMap::new();
-            // if vertex_global_fields does not contain "_id" we have to add it as it is required
-            // if this is not done, the "_id" field will not be returned from the server's dump endpoint
-            if !vertex_global_fields.contains(&"_id".to_string()) {
-                vertex_projections.insert("_id".to_string(), vec!["_id".to_string()]);
-            }
 
             // now add all user specific fields
             for field in vertex_global_fields {

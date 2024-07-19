@@ -255,19 +255,22 @@ fn build_aql_query(
         .fields
         .iter()
         .filter(|&s| s != "@collection_name") // Filter out "@collection_name" field
+        .filter(|&s| s != "_id") // Filter out "_id" field
+        .filter(|&s| s != "_from") // Filter out "_from" field
+        .filter(|&s| s != "_to") // Filter out "_to" field
         .map(|s| format!("{}: doc.{},", s, s))
         .collect::<Vec<String>>()
         .join("\n");
     let identifiers = if is_edge {
         "_to: doc._to,\n_from: doc._from,\n"
     } else {
-        "_key: doc._key,\n"
+        "_id: doc._id,\n"
     };
+
     let query = format!(
         "
         FOR doc in @@col
             RETURN {{
-                _id: doc._id,
                 {}
                 {}
             }}
