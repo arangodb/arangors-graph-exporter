@@ -458,7 +458,9 @@ async fn init_empty_custom_graph_loader() {
         if major > 3 || (major == 3 && minor >= 11) {
             assert!(edges_result.is_err());
             match edges_result {
-                Err(GraphLoaderError::Other(ref msg)) if msg.contains("No edge shards found!") => {
+                Err(GraphLoaderError::Other(ref msg))
+                    if msg.contains("No edge collections given!") =>
+                {
                     assert!(true)
                 }
                 _ => assert!(false),
