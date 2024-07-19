@@ -1,27 +1,42 @@
 services:
+  # NOT USED FOR TESTING OR CI/CD
+  # ONLY USED FOR LOCAL DEVELOPMENT
+  # TO BE ABLE TO QUICKLY START DIFFERENT ARANGODB INSTANCES WITH DOCKER
 
-  lightning_arangodb_single_server:
-    container_name: arangodb-single-server-instance
-    image: arangodb/arangodb
-    ports:
-      - 8529:8529
-    environment:
-      - ARANGO_ROOT_PASSWORD=""
-      - ARANGO_NO_AUTH=false
-    volumes:
-      - ./adb_single_server/data:/var/lib/arangodb3
-      - ./adb_single_server/apps:/var/lib/arangodb3-apps
-      - ./secrets.jwt/token:/secrets/token:ro
-    command: arangodb --starter.mode=single --auth.jwt-secret=./secrets/token
+  #lightning_arangodb_single_server:
+  #  container_name: arangodb-single-server-instance
+  #  image: arangodb/arangodb
+  #  ports:
+  #    - "1335:8529"
+  #  environment:
+  #    - ARANGO_ROOT_PASSWORD=""
+  #    - ARANGO_NO_AUTH=false
+  #  volumes:
+  #    - ./adb_single_server/data:/var/lib/arangodb3
+  #    - ./adb_single_server/apps:/var/lib/arangodb3-apps
+  #    - ./secrets.jwt/token:/secrets/token:ro
+  #  command: arangodb --starter.mode=single --auth.jwt-secret=./secrets/token
 
-  lightning_arangodb_cluster:
-    container_name: arangodb-cluster-instance
-    image: arangodb/arangodb
+  #lightning_arangodb_cluster:
+  #  container_name: arangodb-cluster-instance
+  #  image: arangodb/arangodb
+  #  ports:
+  #    - "1336:8529"
+  #  volumes:
+  #    - ./secrets.jwt/token:/secrets/token:ro
+  #  environment:
+  #    - ARANGO_ROOT_PASSWORD=""
+  #    - ARANGO_NO_AUTH=false
+  #  command: arangodb --mode=cluster --local=true --auth.jwt-secret=./secrets/token
+
+  lightning_arangodb_cluster_3.10:
+    container_name: arangodb-cluster-instance-3-10
+    image: arangodb/arangodb:3.10
     ports:
-      - 8530:8529
+      - "8529:8529"
     volumes:
       - ./secrets.jwt/token:/secrets/token:ro
     environment:
-      - ARANGO_ROOT_PASSWORD=""
+      - ARANGO_ROOT_PASSWORD="test"
       - ARANGO_NO_AUTH=false
     command: arangodb --mode=cluster --local=true --auth.jwt-secret=./secrets/token
