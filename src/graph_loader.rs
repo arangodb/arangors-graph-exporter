@@ -783,7 +783,9 @@ impl GraphLoader {
             Some(LoadStrategy::Dump) => {
                 if self.e_collections.is_empty() {
                     error!("No edge collections given!");
-                    return Err(GraphLoaderError::from("No edge collections given!".to_string()));
+                    return Err(GraphLoaderError::from(
+                        "No edge collections given!".to_string(),
+                    ));
                 }
                 if self.edge_map.is_empty() {
                     error!("No edge shards found!");
@@ -912,7 +914,7 @@ impl GraphLoader {
     }
 
     pub fn produce_vertex_projections(&self) -> Option<HashMap<String, Vec<String>>> {
-        assert!(self.supports_projections);
+        assert!(self.supports_projections.unwrap());
         let mut potential_vertex_projections: Option<HashMap<String, Vec<String>>> = None;
         let vertex_global_fields = self.get_all_vertices_fields_as_list();
 
@@ -933,7 +935,7 @@ impl GraphLoader {
     }
 
     pub fn produce_edge_projections(&self) -> Option<HashMap<String, Vec<String>>> {
-        assert!(self.supports_projections);
+        assert!(self.supports_projections.unwrap());
         let mut potential_edge_projections: Option<HashMap<String, Vec<String>>> = None;
         let edge_global_fields = self.get_all_edges_fields_as_list();
 
