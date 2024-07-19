@@ -43,6 +43,7 @@ pub struct GraphLoader {
     // should be used as private
     load_strategy: Option<LoadStrategy>,
     support_info: Option<SupportInfo>,
+    supports_projections: Option<bool>,
 }
 
 fn collection_name_from_id(id: &str) -> String {
@@ -87,6 +88,7 @@ impl GraphLoader {
             edge_map: HashMap::new(),
             load_strategy: None,
             support_info: None,
+            supports_projections: None,
         };
         let init_result = graph_loader.initialize().await;
         init_result?;
@@ -97,7 +99,14 @@ impl GraphLoader {
     async fn does_arangodb_supports_dump_endpoint(
         &self,
         client: &ClientWithMiddleware,
-    ) -> Result<bool, String> {
+        support_info: &Option<SupportInfo>,
+    ) -> Result<(bool, bool), String> {
+        let is_cluster = support_info
+            .as_ref()
+            .ok_or("Support Info not set".to_string())?
+            .deployment
+            .deployment_type
+            == DeploymentType::Cluster;
         let server_version_url = self.db_config.endpoints[0].clone() + "/_api/version";
         let resp = handle_auth(client.get(server_version_url), &self.db_config)
             .send()
@@ -118,7 +127,7 @@ impl GraphLoader {
             ));
         }
 
-        let supports_dump_endpoint = {
+        let (supports_dump_endpoint, support_dump_projections) = {
             let major: u8 = version_parts
                 .first()
                 .ok_or("Unable to parse Major Version".to_string())?
@@ -134,17 +143,31 @@ impl GraphLoader {
                 .map(|x| x.0)
                 .any(|x| x == major);
             if !major_supports {
-                false
+                (false, false)
             } else {
-                MIN_SUPPORTED_MINOR_VERSIONS
+                let mut supports_dump = MIN_SUPPORTED_MINOR_VERSIONS
                     .iter()
                     .find(|x| x.0 == major)
                     .ok_or("Unable to find supported version".to_string())?
                     .1
-                    <= minor
+                    <= minor;
+
+                // One special rule, if we are a cluster and 3.11, we support the dump endpoint
+                if is_cluster && major == 3 && minor == 11 {
+                    supports_dump = true;
+                }
+
+                // Rule for projections: Supported from 3.12 onwards
+                let mut supports_projections = false;
+                if major == 3 && minor >= 12 {
+                    supports_projections = true;
+                }
+
+                (supports_dump, supports_projections)
             }
         };
-        Ok(supports_dump_endpoint)
+
+        Ok((supports_dump_endpoint, support_dump_projections))
     }
 
     async fn get_arangodb_support_information(
@@ -185,8 +208,11 @@ impl GraphLoader {
         &mut self,
         client: &ClientWithMiddleware,
     ) -> Result<(), String> {
-        let dump_support_enabled = self.does_arangodb_supports_dump_endpoint(client).await?;
         self.support_info = Some(self.get_arangodb_support_information(client).await?);
+        let (dump_support_enabled, dump_projections_support) = self
+            .does_arangodb_supports_dump_endpoint(client, &self.support_info)
+            .await?;
+        self.supports_projections = Some(dump_projections_support);
         self.load_strategy = Some(self.identify_arangodb_load_strategy(dump_support_enabled));
         Ok(())
     }
@@ -485,7 +511,13 @@ impl GraphLoader {
                             "No vertex shards found!".to_string(),
                         ));
                     }
-                    let potential_vertex_projections = self.produce_vertex_projections();
+
+                    let potential_vertex_projections;
+                    if self.supports_projections.unwrap_or(false) {
+                        potential_vertex_projections = self.produce_vertex_projections();
+                    } else {
+                        potential_vertex_projections = None;
+                    }
 
                     let dump_result = crate::sharding::get_all_shard_data(
                         &self.db_config,
@@ -749,11 +781,21 @@ impl GraphLoader {
 
         match self.load_strategy {
             Some(LoadStrategy::Dump) => {
+                if self.e_collections.is_empty() {
+                    error!("No edge collections given!");
+                    return Err(GraphLoaderError::from("No edge collections given!".to_string()));
+                }
                 if self.edge_map.is_empty() {
                     error!("No edge shards found!");
                     return Err(GraphLoaderError::from("No edge shards found!".to_string()));
                 }
-                let potential_edge_projections = self.produce_edge_projections();
+                let potential_edge_projections;
+                if self.supports_projections.unwrap_or(false) {
+                    potential_edge_projections = self.produce_edge_projections();
+                } else {
+                    potential_edge_projections = None;
+                }
+
                 let shard_result = crate::sharding::get_all_shard_data(
                     &self.db_config,
                     &self.load_config,
@@ -870,6 +912,7 @@ impl GraphLoader {
     }
 
     pub fn produce_vertex_projections(&self) -> Option<HashMap<String, Vec<String>>> {
+        assert!(self.supports_projections);
         let mut potential_vertex_projections: Option<HashMap<String, Vec<String>>> = None;
         let vertex_global_fields = self.get_all_vertices_fields_as_list();
 
@@ -890,6 +933,7 @@ impl GraphLoader {
     }
 
     pub fn produce_edge_projections(&self) -> Option<HashMap<String, Vec<String>>> {
+        assert!(self.supports_projections);
         let mut potential_edge_projections: Option<HashMap<String, Vec<String>>> = None;
         let edge_global_fields = self.get_all_edges_fields_as_list();
 
@@ -907,9 +951,6 @@ impl GraphLoader {
             }
             if !edge_global_fields.contains(&"_to".to_string()) {
                 edge_projections.insert("_to".to_string(), vec!["_to".to_string()]);
-            }
-            if !edge_global_fields.contains(&"_id".to_string()) {
-                edge_projections.insert("_id".to_string(), vec!["_id".to_string()]);
             }
 
             for field in edge_global_fields {

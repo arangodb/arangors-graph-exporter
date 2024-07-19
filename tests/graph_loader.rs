@@ -236,7 +236,7 @@ async fn init_named_graph_loader_with_data() {
                              edge_field_names: &Vec<String>| {
         assert_eq!(from_ids.len(), 9);
         assert_eq!(from_ids.len(), to_ids.len());
-        assert_eq!(columns.len(), 10);
+        assert_eq!(columns.len(), 9);
 
         for (v_index, edge) in columns.iter().enumerate() {
             assert_eq!(edge.len(), 2);
@@ -250,7 +250,7 @@ async fn init_named_graph_loader_with_data() {
             assert_eq!(to_id.to_string(), expected_to_id);
         }
 
-        assert_eq!(edge_field_names.len(), 1);
+        assert_eq!(edge_field_names.len(), 2);
         assert_eq!(edge_field_names[0], "_from");
         assert_eq!(edge_field_names[1], "_to");
         Ok(())

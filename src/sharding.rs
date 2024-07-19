@@ -33,6 +33,15 @@ struct DumpStartBody {
     prefetch_count: u32,
     parallelism: u32,
     shards: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct DumpStartBodyWithProjections {
+    batch_size: u64,
+    prefetch_count: u32,
+    parallelism: u32,
+    shards: Vec<String>,
     projections: Option<HashMap<String, Vec<String>>>,
 }
 
@@ -81,18 +90,27 @@ pub(crate) async fn get_all_shard_data(
             make_url(db_config, "/_api/dump/start")
         };
 
-        let mut body = DumpStartBody {
-            batch_size: load_config.batch_size,
-            prefetch_count: load_config.prefetch_count,
-            parallelism: load_config.parallelism,
-            shards: shard_list.clone(), // in case of a single server, this is a collection and not a shard
-            projections: None,
-        };
+        let body_v: Vec<u8>;
         if projections.is_some() {
-            body.projections.clone_from(&projections)
+            let body = DumpStartBodyWithProjections {
+                batch_size: load_config.batch_size,
+                prefetch_count: load_config.prefetch_count,
+                parallelism: load_config.parallelism,
+                shards: shard_list.clone(), // in case of a single server, this is a collection and not a shard
+                projections: projections.clone(),
+            };
+            body_v = serde_json::to_vec::<DumpStartBodyWithProjections>(&body)
+                .expect("could not serialize DumpStartBody");
+        } else {
+            let body = DumpStartBody {
+                batch_size: load_config.batch_size,
+                prefetch_count: load_config.prefetch_count,
+                parallelism: load_config.parallelism,
+                shards: shard_list.clone(), // in case of a single server, this is a collection and not a shard
+            };
+            body_v = serde_json::to_vec::<DumpStartBody>(&body)
+                .expect("could not serialize DumpStartBody");
         }
-        let body_v =
-            serde_json::to_vec::<DumpStartBody>(&body).expect("could not serialize DumpStartBody");
 
         let resp = handle_auth(client.post(url), db_config)
             .body(body_v)
