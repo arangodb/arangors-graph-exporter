@@ -512,12 +512,12 @@ impl GraphLoader {
                         ));
                     }
 
-                    let potential_vertex_projections;
-                    if self.supports_projections.unwrap_or(false) {
-                        potential_vertex_projections = self.produce_vertex_projections();
+                    let potential_vertex_projections = if self.supports_projections.unwrap_or(false)
+                    {
+                        self.produce_vertex_projections()
                     } else {
-                        potential_vertex_projections = None;
-                    }
+                        None
+                    };
 
                     let dump_result = crate::sharding::get_all_shard_data(
                         &self.db_config,
@@ -791,12 +791,11 @@ impl GraphLoader {
                     error!("No edge shards found!");
                     return Err(GraphLoaderError::from("No edge shards found!".to_string()));
                 }
-                let potential_edge_projections;
-                if self.supports_projections.unwrap_or(false) {
-                    potential_edge_projections = self.produce_edge_projections();
+                let potential_edge_projections = if self.supports_projections.unwrap_or(false) {
+                    self.produce_edge_projections()
                 } else {
-                    potential_edge_projections = None;
-                }
+                    None
+                };
 
                 let shard_result = crate::sharding::get_all_shard_data(
                     &self.db_config,

@@ -90,8 +90,7 @@ pub(crate) async fn get_all_shard_data(
             make_url(db_config, "/_api/dump/start")
         };
 
-        let body_v: Vec<u8>;
-        if projections.is_some() {
+        let body_v: Vec<u8> = if projections.is_some() {
             let body = DumpStartBodyWithProjections {
                 batch_size: load_config.batch_size,
                 prefetch_count: load_config.prefetch_count,
@@ -99,8 +98,8 @@ pub(crate) async fn get_all_shard_data(
                 shards: shard_list.clone(), // in case of a single server, this is a collection and not a shard
                 projections: projections.clone(),
             };
-            body_v = serde_json::to_vec::<DumpStartBodyWithProjections>(&body)
-                .expect("could not serialize DumpStartBody");
+            serde_json::to_vec::<DumpStartBodyWithProjections>(&body)
+                .expect("could not serialize DumpStartBody")
         } else {
             let body = DumpStartBody {
                 batch_size: load_config.batch_size,
@@ -108,9 +107,8 @@ pub(crate) async fn get_all_shard_data(
                 parallelism: load_config.parallelism,
                 shards: shard_list.clone(), // in case of a single server, this is a collection and not a shard
             };
-            body_v = serde_json::to_vec::<DumpStartBody>(&body)
-                .expect("could not serialize DumpStartBody");
-        }
+            serde_json::to_vec::<DumpStartBody>(&body).expect("could not serialize DumpStartBody")
+        };
 
         let resp = handle_auth(client.post(url), db_config)
             .body(body_v)
