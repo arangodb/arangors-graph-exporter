@@ -267,7 +267,7 @@ fn get_attribute_position(field_names: &Vec<String>, attribute: &str) -> usize {
 
 #[tokio::test]
 #[serial]
-async fn init_named_graph_loader_with_data_all_v_and_e_attributes() {
+async fn init_named_graph_loader_with_data_all_v_and_e_attributes_manually_set() {
     setup(true).await;
     let db_config = build_db_config();
     let load_config = build_load_config();
@@ -385,6 +385,131 @@ async fn init_named_graph_loader_with_data_all_v_and_e_attributes() {
         assert!(edge_field_names.contains(&"x".to_string()));
         assert!(edge_field_names.contains(&"y".to_string()));
         assert!(edge_field_names.contains(&"z".to_string()));
+        Ok(())
+    };
+    let edges_result = graph_loader.do_edges(handle_edges).await;
+    assert!(edges_result.is_ok());
+
+    teardown().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn init_named_graph_loader_with_data_all_v_and_e_attributes_all_by_boolean() {
+    setup(true).await;
+    let db_config = build_db_config();
+    let load_config = build_load_config_with_v_with_e(true, true);
+    let global_fields = vec![];
+    let graph_loader_res = GraphLoader::new_named(
+        db_config,
+        load_config,
+        GRAPH.to_string(),
+        Some(global_fields.clone()),
+        Some(global_fields),
+    )
+    .await;
+    if let Err(ref e) = graph_loader_res {
+        println!("{:?}", e);
+    }
+
+    assert!(graph_loader_res.is_ok());
+
+    // check that data is loaded.
+    // in this case, no global vertex attributes have been requested
+    // therefore only the _key attribute is loaded for vertex documents
+    let graph_loader = graph_loader_res.unwrap();
+    let handle_vertices = move |vertex_ids: &Vec<Vec<u8>>,
+                                columns: &mut Vec<Vec<Value>>,
+                                vertex_field_names: &Vec<String>| {
+        assert_eq!(vertex_ids.len(), 10);
+        assert_eq!(columns.len(), 10);
+
+        for (v_index, v_id) in vertex_ids.iter().enumerate() {
+            let id = v_id.iter().map(|x| *x as char).collect::<String>();
+            let expected_id = format!("{}/{}", VERTEX_COLLECTION, v_index);
+            assert_eq!(id, expected_id);
+        }
+
+        for (v_index, vertex_json_arr) in columns.iter().enumerate() {
+            assert_eq!(vertex_json_arr.len(), 1);
+            let vertex = &vertex_json_arr[0];
+            assert_eq!(3, vertex.as_object().unwrap().len());
+
+            let x = &vertex[get_attribute_position(vertex_field_names, "x")]
+                .as_u64()
+                .unwrap();
+            let y = &vertex[get_attribute_position(vertex_field_names, "y")]
+                .as_u64()
+                .unwrap();
+            let z = &vertex[get_attribute_position(vertex_field_names, "z")]
+                .as_u64()
+                .unwrap();
+            let expected_x_value = (v_index + 1) as u64;
+            let expected_y_value = (v_index + 2) as u64;
+            let expected_z_value = (v_index + 3) as u64;
+            assert_eq!(x, &expected_x_value);
+            assert_eq!(y, &expected_y_value);
+            assert_eq!(z, &expected_z_value);
+        }
+
+        assert_eq!(vertex_field_names.len(), 0);
+        Ok(())
+    };
+    let vertices_result = graph_loader.do_vertices(handle_vertices).await;
+    assert!(vertices_result.is_ok());
+
+    let handle_edges = move |from_ids: &Vec<Vec<u8>>,
+                             to_ids: &Vec<Vec<u8>>,
+                             columns: &mut Vec<Vec<Value>>,
+                             edge_field_names: &Vec<String>| {
+        assert_eq!(from_ids.len(), 9);
+        assert_eq!(from_ids.len(), to_ids.len());
+        assert_eq!(columns.len(), 9);
+
+        for (e_index, from_id) in from_ids.iter().enumerate() {
+            let from_id_str = from_id.iter().map(|x| *x as char).collect::<String>();
+            let to_id_str = to_ids[e_index]
+                .iter()
+                .map(|x| *x as char)
+                .collect::<String>();
+            assert_eq!(from_id_str, format!("{}/{}", VERTEX_COLLECTION, e_index));
+            assert_eq!(to_id_str, format!("{}/{}", VERTEX_COLLECTION, e_index + 1));
+        }
+
+        for (e_index, to_id) in to_ids.iter().enumerate() {
+            let from_id_str = from_ids[e_index]
+                .iter()
+                .map(|x| *x as char)
+                .collect::<String>();
+            let to_id_str = to_id.iter().map(|x| *x as char).collect::<String>();
+            assert_eq!(from_id_str, format!("{}/{}", VERTEX_COLLECTION, e_index));
+            assert_eq!(to_id_str, format!("{}/{}", VERTEX_COLLECTION, e_index + 1));
+        }
+
+        for (e_index, edge_json_arr) in columns.iter().enumerate() {
+            assert_eq!(edge_json_arr.len(), 1);
+            assert_eq!(edge_json_arr.len(), edge_field_names.len());
+            let edge = &edge_json_arr[0];
+            assert_eq!(3, edge.as_object().unwrap().len());
+
+            let x = &edge[get_attribute_position(edge_field_names, "x")]
+                .as_u64()
+                .unwrap();
+            let y = &edge[get_attribute_position(edge_field_names, "y")]
+                .as_u64()
+                .unwrap();
+            let z = &edge[get_attribute_position(edge_field_names, "z")]
+                .as_u64()
+                .unwrap();
+            let expected_x_value = (e_index + 1) as u64;
+            let expected_y_value = (e_index + 2) as u64;
+            let expected_z_value = (e_index + 3) as u64;
+            assert_eq!(x, &expected_x_value);
+            assert_eq!(y, &expected_y_value);
+            assert_eq!(z, &expected_z_value);
+        }
+
+        assert_eq!(edge_field_names.len(), 0);
         Ok(())
     };
     let edges_result = graph_loader.do_edges(handle_edges).await;
