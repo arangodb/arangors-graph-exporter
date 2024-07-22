@@ -884,9 +884,7 @@ impl GraphLoader {
         if unique_fields.is_empty() && !self.load_config.load_all_vertex_attributes {
             unique_fields.insert("_id".to_string());
         }
-        if unique_fields.contains("@collection_name")
-            && !unique_fields.contains("_id")
-        {
+        if unique_fields.contains("@collection_name") && !unique_fields.contains("_id") {
             unique_fields.insert("_id".to_string());
         }
 
@@ -905,9 +903,7 @@ impl GraphLoader {
             unique_fields.insert("_to".to_string());
         }
 
-        if unique_fields.contains("@collection_name")
-            && !unique_fields.contains(&"_id".to_string())
-        {
+        if unique_fields.contains("@collection_name") && !unique_fields.contains("_id") {
             unique_fields.insert("_id".to_string());
         }
 
