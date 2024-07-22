@@ -261,11 +261,28 @@ fn build_aql_query(
         .map(|s| format!("{}: doc.{},", s, s))
         .collect::<Vec<String>>()
         .join("\n");
-    let identifiers = if is_edge {
-        "_to: doc._to,\n_from: doc._from,\n"
+    let mut identifiers = if is_edge {
+        "_to: doc._to,\n_from: doc._from,\n".to_string()
     } else {
-        "_id: doc._id,\n"
+        "_id: doc._id,\n".to_string()
     };
+
+    // TODO: Clean this up later. Also: We need to think about splitting
+    // the attribute fields which are mandatory for the actual pull of
+    // data out of arangodb, but additionally also the fields we want to
+    // return to the client.
+    // Example: Client requests "@collection_name". This will lead to "_id"
+    // be present. But "_id" does not need to be returned to the client,
+    // unless it got requested. This state we don't have right now.
+    if is_edge {
+        let collection_fields = collection_description.fields.clone();
+        for field in collection_fields.iter() {
+            if field == "@collection_name" {
+                // in this case, append the _id field to the string as well
+                identifiers.push_str("_id: doc._id,\n");
+            }
+        }
+    }
 
     let query = format!(
         "

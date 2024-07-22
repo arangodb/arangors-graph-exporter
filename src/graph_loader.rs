@@ -690,8 +690,6 @@ impl GraphLoader {
                                 edge_json.push(cols);
                             }
                         }
-
-                        insert_edge_clone(&froms, &tos, &mut edge_json, &edge_global_fields)?;
                     } else {
                         // AQL Variant
                         let values = match serde_json::from_str::<CursorResult>(body) {
@@ -771,9 +769,8 @@ impl GraphLoader {
                                 edge_json.push(cols);
                             }
                         }
-
-                        insert_edge_clone(&froms, &tos, &mut edge_json, &edge_global_fields)?;
                     }
+                    insert_edge_clone(&froms, &tos, &mut edge_json, &edge_global_fields)?;
                 }
                 Ok(())
             });
@@ -887,6 +884,11 @@ impl GraphLoader {
         if unique_fields.is_empty() && !self.load_config.load_all_vertex_attributes {
             unique_fields.insert("_id".to_string());
         }
+        if unique_fields.contains("@collection_name")
+            && !unique_fields.contains("_id")
+        {
+            unique_fields.insert("_id".to_string());
+        }
 
         unique_fields.into_iter().collect()
     }
@@ -901,6 +903,12 @@ impl GraphLoader {
         if unique_fields.is_empty() && !self.load_config.load_all_edge_attributes {
             unique_fields.insert("_from".to_string());
             unique_fields.insert("_to".to_string());
+        }
+
+        if unique_fields.contains("@collection_name")
+            && !unique_fields.contains(&"_id".to_string())
+        {
+            unique_fields.insert("_id".to_string());
         }
 
         unique_fields.into_iter().collect()
