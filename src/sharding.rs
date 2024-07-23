@@ -33,6 +33,7 @@ struct DumpStartBody {
     prefetch_count: u32,
     parallelism: u32,
     shards: Vec<String>,
+    projections: Option<HashMap<String, Vec<String>>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -57,6 +58,7 @@ pub(crate) async fn get_all_shard_data(
     shard_map: &ShardMap,
     result_channels: Vec<tokio::sync::mpsc::Sender<Bytes>>,
     deployment_type: &DeploymentType,
+    projections: Option<HashMap<String, Vec<String>>>,
 ) -> Result<(), GraphLoaderError> {
     let use_tls = db_config.endpoints[0].starts_with("https://");
     let client_config = ClientConfig::builder()
@@ -78,12 +80,17 @@ pub(crate) async fn get_all_shard_data(
         } else {
             make_url(db_config, "/_api/dump/start")
         };
-        let body = DumpStartBody {
+
+        let mut body = DumpStartBody {
             batch_size: load_config.batch_size,
             prefetch_count: load_config.prefetch_count,
             parallelism: load_config.parallelism,
             shards: shard_list.clone(), // in case of a single server, this is a collection and not a shard
+            projections: None,
         };
+        if projections.is_some() {
+            body.projections = projections.clone();
+        }
         let body_v =
             serde_json::to_vec::<DumpStartBody>(&body).expect("could not serialize DumpStartBody");
 
