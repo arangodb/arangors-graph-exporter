@@ -206,7 +206,7 @@ async fn init_named_graph_loader_with_data() {
 
     // check that data is loaded.
     // in this case, no global vertex attributes have been requested
-    // therefore only the _key attribute is loaded for vertex documents
+    // therefore only the _id attribute is loaded for vertex documents
     let graph_loader = graph_loader_res.unwrap();
     let handle_vertices = move |vertex_ids: &Vec<Vec<u8>>,
                                 columns: &mut Vec<Vec<Value>>,
@@ -214,17 +214,12 @@ async fn init_named_graph_loader_with_data() {
         assert_eq!(vertex_ids.len(), 10);
 
         assert_eq!(columns.len(), 10);
-        for (v_index, vertex) in columns.iter().enumerate() {
-            assert_eq!(vertex.len(), 1);
+        for (_v_index, vertex) in columns.iter().enumerate() {
+            assert_eq!(vertex.len(), 0);
             assert_eq!(vertex.len(), vertex_field_names.len());
-            let element_0 = &vertex[0];
-            let id = element_0.as_str().unwrap();
-            let expected_id = format!("{}/{}", VERTEX_COLLECTION, v_index);
-            assert_eq!(id.to_string(), expected_id);
         }
 
-        assert_eq!(vertex_field_names.len(), 1);
-        assert_eq!(vertex_field_names[0], "_id");
+        assert_eq!(vertex_field_names.len(), 0);
         Ok(())
     };
     let vertices_result = graph_loader.do_vertices(handle_vertices).await;
@@ -236,23 +231,22 @@ async fn init_named_graph_loader_with_data() {
                              edge_field_names: &Vec<String>| {
         assert_eq!(from_ids.len(), 9);
         assert_eq!(from_ids.len(), to_ids.len());
+        assert_eq!(to_ids.len(), 9);
+        assert_eq!(to_ids.len(), columns.len());
         assert_eq!(columns.len(), 9);
 
-        for (v_index, edge) in columns.iter().enumerate() {
-            assert_eq!(edge.len(), 2);
-            assert_eq!(edge.len(), edge_field_names.len());
-            let element_0 = &edge[0];
-            let from_id = element_0.as_str().unwrap();
-            let to_id = &edge[1].as_str().unwrap();
-            let expected_from_id = format!("{}/{}", VERTEX_COLLECTION, v_index);
-            let expected_to_id = format!("{}/{}", VERTEX_COLLECTION, v_index + 1);
-            assert_eq!(from_id.to_string(), expected_from_id);
-            assert_eq!(to_id.to_string(), expected_to_id);
+        for (from_idx, from_id) in from_ids.iter().enumerate() {
+            let from_id_str = from_id.iter().map(|x| *x as char).collect::<String>();
+            let expected_from_id = format!("{}/{}", VERTEX_COLLECTION, from_idx);
+            assert_eq!(from_id_str, expected_from_id);
+        }
+        for (to_idx, to_id) in to_ids.iter().enumerate() {
+            let to_id_str = to_id.iter().map(|x| *x as char).collect::<String>();
+            let expected_to_id = format!("{}/{}", VERTEX_COLLECTION, to_idx + 1);
+            assert_eq!(to_id_str, expected_to_id);
         }
 
-        assert_eq!(edge_field_names.len(), 2);
-        assert_eq!(edge_field_names[0], "_from");
-        assert_eq!(edge_field_names[1], "_to");
+        assert_eq!(edge_field_names.len(), 0);
         Ok(())
     };
     let edges_result = graph_loader.do_edges(handle_edges).await;
