@@ -218,7 +218,7 @@ impl GraphLoader {
     }
 
     fn verify_parameters(&self) -> Result<(), GraphLoaderError> {
-        if !self.get_all_vertices_fields_as_list().is_empty()
+        if !self.get_all_vertices_fields_to_fetch_as_list().is_empty()
             && self.load_config.load_all_vertex_attributes
         {
             return Err(GraphLoaderError::from(
@@ -226,7 +226,7 @@ impl GraphLoader {
                     .to_string(),
             ));
         }
-        if !self.get_all_edges_fields_as_list().is_empty()
+        if !self.get_all_edges_fields_to_fetch_as_list().is_empty()
             && self.load_config.load_all_edge_attributes
         {
             return Err(GraphLoaderError::from(
@@ -358,7 +358,7 @@ impl GraphLoader {
                 let (sender, mut receiver) = tokio::sync::mpsc::channel::<Bytes>(10);
                 senders.push(sender);
 
-                let vertex_global_fields = self.get_all_vertices_fields_as_list();
+                let vertex_global_fields = self.get_all_vertex_fields_as_list_to_return();
                 let insert_vertex_clone = vertices_function.clone();
                 let strategy_clone = self.load_strategy;
                 let load_config_clone = self.load_config.clone();
@@ -597,7 +597,7 @@ impl GraphLoader {
             let (sender, mut receiver) = tokio::sync::mpsc::channel::<Bytes>(10);
             senders.push(sender);
 
-            let edge_global_fields = self.get_all_edges_fields_as_list();
+            let edge_global_fields = self.get_all_edges_fields_as_list_to_return();
             let insert_edge_clone = edges_function.clone();
             let strategy_clone = self.load_strategy;
             let load_config_clone = self.load_config.clone();
@@ -859,22 +859,15 @@ impl GraphLoader {
         self.e_collections.keys().cloned().collect()
     }
 
-    pub fn get_all_vertices_fields_as_hashmap(&self) -> HashMap<String, Vec<String>> {
-        self.v_collections
-            .iter()
-            .map(|(k, v)| (k.clone(), v.fields.clone()))
-            .collect()
-    }
-
-    pub fn get_vertex_fields_as_list(&self, collection_name: &String) -> Vec<String> {
+    pub fn get_all_vertex_fields_as_list_to_return(&self) -> Vec<String> {
         let mut fields = vec![];
-        if let Some(c) = self.v_collections.get(collection_name) {
+        for c in self.v_collections.values() {
             fields.extend(c.fields.clone());
         }
         fields
     }
 
-    pub fn get_all_vertices_fields_as_list(&self) -> Vec<String> {
+    pub fn get_all_vertices_fields_to_fetch_as_list(&self) -> Vec<String> {
         // Guaranteed to be unique
         let mut unique_fields = HashSet::new();
         for fields in self.v_collections.values().flat_map(|c| c.fields.clone()) {
@@ -891,7 +884,15 @@ impl GraphLoader {
         unique_fields.into_iter().collect()
     }
 
-    pub fn get_all_edges_fields_as_list(&self) -> Vec<String> {
+    pub fn get_all_edges_fields_as_list_to_return(&self) -> Vec<String> {
+        let mut fields = vec![];
+        for c in self.e_collections.values() {
+            fields.extend(c.fields.clone());
+        }
+        fields
+    }
+
+    pub fn get_all_edges_fields_to_fetch_as_list(&self) -> Vec<String> {
         // Guaranteed to be unique
         let mut unique_fields = HashSet::new();
         for fields in self.e_collections.values().flat_map(|c| c.fields.clone()) {
@@ -910,17 +911,10 @@ impl GraphLoader {
         unique_fields.into_iter().collect()
     }
 
-    pub fn get_all_edges_fields_as_hashmap(&self) -> HashMap<String, Vec<String>> {
-        self.e_collections
-            .iter()
-            .map(|(k, v)| (k.clone(), v.fields.clone()))
-            .collect()
-    }
-
     pub fn produce_vertex_projections(&self) -> Option<HashMap<String, Vec<String>>> {
         assert!(self.supports_projections.unwrap());
         let mut potential_vertex_projections: Option<HashMap<String, Vec<String>>> = None;
-        let vertex_global_fields = self.get_all_vertices_fields_as_list();
+        let vertex_global_fields = self.get_all_vertices_fields_to_fetch_as_list();
 
         // We can only make use of projections in case:
         // 1.) The user has not requested all vertex attributes
@@ -941,7 +935,7 @@ impl GraphLoader {
     pub fn produce_edge_projections(&self) -> Option<HashMap<String, Vec<String>>> {
         assert!(self.supports_projections.unwrap());
         let mut potential_edge_projections: Option<HashMap<String, Vec<String>>> = None;
-        let edge_global_fields = self.get_all_edges_fields_as_list();
+        let edge_global_fields = self.get_all_edges_fields_to_fetch_as_list();
 
         // We can only make use of projections in case:
         // 1.) The user has not requested all vertex attributes
