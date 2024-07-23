@@ -17,6 +17,12 @@ pub struct ClientConfigBuilder {
     n_retries: Option<u32>,
 }
 
+impl Default for ClientConfigBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ClientConfigBuilder {
     pub fn new() -> ClientConfigBuilder {
         ClientConfigBuilder {

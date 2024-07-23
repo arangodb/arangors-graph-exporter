@@ -38,7 +38,9 @@ pub fn build_client(
 
 fn get_cert(cert_path: &String) -> Result<Certificate, String> {
     if cert_path.is_empty() {
-        return Err("Error message from reading TLS certificate: Certificate path is empty".to_string());
+        return Err(
+            "Error message from reading TLS certificate: Certificate path is empty".to_string(),
+        );
     }
     let mut cert_buf = vec![];
     let mut file = File::open(cert_path)

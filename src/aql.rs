@@ -1,7 +1,7 @@
 use crate::client::auth::handle_auth;
 use crate::client::config::ClientConfig;
 use crate::client::{build_client, make_url};
-use crate::{CollectionInfo, DatabaseConfiguration};
+use crate::{CollectionInfo, DataLoadConfiguration, DatabaseConfiguration};
 use bytes::Bytes;
 use log::debug;
 use reqwest::StatusCode;
@@ -56,6 +56,7 @@ struct CursorResponse {
 
 pub async fn get_all_data_aql(
     db_config: &DatabaseConfiguration,
+    load_config: &DataLoadConfiguration,
     collections: &[CollectionInfo],
     result_channels: Vec<tokio::sync::mpsc::Sender<Bytes>>,
     is_edge: bool,
@@ -81,8 +82,15 @@ pub async fn get_all_data_aql(
     let mut task_set = JoinSet::new();
     let mut endpoints_round_robin: usize = 0;
     let mut consumers_round_robin: usize = 0;
+
+    let load_all_attributes: bool = if is_edge {
+        load_config.load_all_edge_attributes
+    } else {
+        load_config.load_all_vertex_attributes
+    };
+
     for col in collections.iter() {
-        let query = build_aql_query(col, is_edge);
+        let query = build_aql_query(col, is_edge, load_all_attributes);
         let bind_vars = HashMap::from([("@col".to_string(), col.name.clone())]);
         let body = CreateCursorBody::from_streaming_query_with_size(query, None, Some(bind_vars));
         let body_v = serde_json::to_vec::<CreateCursorBody>(&body)
@@ -234,24 +242,52 @@ pub async fn get_all_data_aql(
     Ok(())
 }
 
-fn build_aql_query(collection_description: &CollectionInfo, is_edge: bool) -> String {
+fn build_aql_query(
+    collection_description: &CollectionInfo,
+    is_edge: bool,
+    load_all_attributes: bool,
+) -> String {
+    if load_all_attributes {
+        return "FOR doc in @@col RETURN doc".to_string();
+    }
+
     let field_strings = collection_description
         .fields
         .iter()
         .filter(|&s| s != "@collection_name") // Filter out "@collection_name" field
+        .filter(|&s| s != "_id") // Filter out "_id" field
+        .filter(|&s| s != "_from") // Filter out "_from" field
+        .filter(|&s| s != "_to") // Filter out "_to" field
         .map(|s| format!("{}: doc.{},", s, s))
         .collect::<Vec<String>>()
         .join("\n");
-    let identifiers = if is_edge {
-        "_to: doc._to,\n_from: doc._from,\n"
+    let mut identifiers = if is_edge {
+        "_to: doc._to,\n_from: doc._from,\n".to_string()
     } else {
-        "_key: doc._key,\n"
+        "_id: doc._id,\n".to_string()
     };
+
+    // TODO: Clean this up later. Also: We need to think about splitting
+    // the attribute fields which are mandatory for the actual pull of
+    // data out of arangodb, but additionally also the fields we want to
+    // return to the client.
+    // Example: Client requests "@collection_name". This will lead to "_id"
+    // be present. But "_id" does not need to be returned to the client,
+    // unless it got requested. This state we don't have right now.
+    if is_edge {
+        let collection_fields = collection_description.fields.clone();
+        for field in collection_fields.iter() {
+            if field == "@collection_name" {
+                // in this case, append the _id field to the string as well
+                identifiers.push_str("_id: doc._id,\n");
+            }
+        }
+    }
+
     let query = format!(
         "
         FOR doc in @@col
             RETURN {{
-                _id: doc._id,
                 {}
                 {}
             }}

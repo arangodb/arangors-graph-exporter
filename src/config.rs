@@ -23,6 +23,12 @@ pub struct DatabaseConfigurationBuilder {
     tls_cert: Option<String>,
 }
 
+impl Default for DatabaseConfigurationBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DatabaseConfigurationBuilder {
     pub fn new() -> Self {
         DatabaseConfigurationBuilder {
@@ -72,12 +78,9 @@ impl DatabaseConfigurationBuilder {
                 .endpoints
                 .unwrap_or_else(|| vec!["http://localhost:8529".to_string()]),
             username: self.username.unwrap_or_else(|| "root".to_string()),
-            password: self.password.unwrap_or_else(|| "".to_string()),
-            jwt_token: self.jwt_token.unwrap_or_else(|| "".to_string()),
-            tls_cert: match self.tls_cert {
-                Some(cert) => Some(cert),
-                None => None,
-            },
+            password: self.password.unwrap_or_default(),
+            jwt_token: self.jwt_token.unwrap_or_default(),
+            tls_cert: self.tls_cert,
         }
     }
 }
@@ -87,6 +90,8 @@ pub struct DataLoadConfiguration {
     pub parallelism: u32,
     pub batch_size: u64,
     pub prefetch_count: u32,
+    pub load_all_vertex_attributes: bool,
+    pub load_all_edge_attributes: bool,
 }
 
 impl Default for DataLoadConfiguration {
@@ -100,11 +105,15 @@ impl DataLoadConfiguration {
         parallelism: Option<u32>,
         batch_size: Option<u64>,
         prefetch_count: Option<u32>,
+        load_all_vertex_attributes: bool,
+        load_all_edge_attributes: bool,
     ) -> Self {
         DataLoadConfiguration {
             parallelism: parallelism.unwrap_or(8),
             batch_size: batch_size.unwrap_or(100_000),
             prefetch_count: prefetch_count.unwrap_or(5),
+            load_all_vertex_attributes,
+            load_all_edge_attributes,
         }
     }
 }
@@ -113,6 +122,14 @@ pub struct DataLoadConfigurationBuilder {
     parallelism: Option<u32>,
     batch_size: Option<u64>,
     prefetch_count: Option<u32>,
+    load_all_vertex_attributes: bool,
+    load_all_edge_attributes: bool,
+}
+
+impl Default for DataLoadConfigurationBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DataLoadConfigurationBuilder {
@@ -121,6 +138,8 @@ impl DataLoadConfigurationBuilder {
             parallelism: None,
             batch_size: None,
             prefetch_count: None,
+            load_all_vertex_attributes: false,
+            load_all_edge_attributes: false,
         }
     }
 
@@ -139,7 +158,23 @@ impl DataLoadConfigurationBuilder {
         self
     }
 
+    pub fn load_all_vertex_attributes(mut self, load_all_vertex_attributes: bool) -> Self {
+        self.load_all_vertex_attributes = load_all_vertex_attributes;
+        self
+    }
+
+    pub fn load_all_edge_attributes(mut self, load_all_edge_attributes: bool) -> Self {
+        self.load_all_edge_attributes = load_all_edge_attributes;
+        self
+    }
+
     pub fn build(self) -> DataLoadConfiguration {
-        DataLoadConfiguration::new(self.parallelism, self.batch_size, self.prefetch_count)
+        DataLoadConfiguration::new(
+            self.parallelism,
+            self.batch_size,
+            self.prefetch_count,
+            self.load_all_vertex_attributes,
+            self.load_all_edge_attributes,
+        )
     }
 }
