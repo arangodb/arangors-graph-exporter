@@ -218,7 +218,7 @@ impl GraphLoader {
     }
 
     fn verify_parameters(&self) -> Result<(), GraphLoaderError> {
-        if !self.get_all_vertices_fields_to_fetch_as_list().is_empty()
+        if !self.get_all_vertex_fields_as_list_to_return().is_empty()
             && self.load_config.load_all_vertex_attributes
         {
             return Err(GraphLoaderError::from(
@@ -226,7 +226,7 @@ impl GraphLoader {
                     .to_string(),
             ));
         }
-        if !self.get_all_edges_fields_to_fetch_as_list().is_empty()
+        if !self.get_all_edges_fields_as_list_to_return().is_empty()
             && self.load_config.load_all_edge_attributes
         {
             return Err(GraphLoaderError::from(
@@ -671,7 +671,7 @@ impl GraphLoader {
                                 let get_value = |v: &Value, field: &str| -> Value {
                                     if field == "@collection_name" {
                                         if let Some(id) = idstr {
-                                            Value::String(collection_name_from_id(&id))
+                                            Value::String(collection_name_from_id(id))
                                         } else {
                                             Value::String("n/A - _id is missing".to_string())
                                         }
@@ -860,55 +860,54 @@ impl GraphLoader {
     }
 
     pub fn get_all_vertex_fields_as_list_to_return(&self) -> Vec<String> {
-        let mut fields = vec![];
-        for c in self.v_collections.values() {
-            fields.extend(c.fields.clone());
-        }
-        fields
-    }
-
-    pub fn get_all_vertices_fields_to_fetch_as_list(&self) -> Vec<String> {
         // Guaranteed to be unique
         let mut unique_fields = HashSet::new();
         for fields in self.v_collections.values().flat_map(|c| c.fields.clone()) {
             unique_fields.insert(fields);
         }
-
-        if unique_fields.is_empty() && !self.load_config.load_all_vertex_attributes {
-            unique_fields.insert("_id".to_string());
-        }
-        if unique_fields.contains("@collection_name") && !unique_fields.contains("_id") {
-            unique_fields.insert("_id".to_string());
-        }
-
         unique_fields.into_iter().collect()
     }
 
-    pub fn get_all_edges_fields_as_list_to_return(&self) -> Vec<String> {
-        let mut fields = vec![];
-        for c in self.e_collections.values() {
-            fields.extend(c.fields.clone());
+    pub fn get_all_vertices_fields_to_fetch_as_list(&self) -> Vec<String> {
+        // Guaranteed to be unique
+        // This method adds required fields if they are not present,
+        // which need to be available to deliver the required resources.
+        let mut unique_fields = self.get_all_vertex_fields_as_list_to_return();
+        if !unique_fields.contains(&"_id".to_string()) {
+            // _id is always required.
+            unique_fields.insert(0, "_id".to_string());
         }
-        fields
+        unique_fields
     }
 
-    pub fn get_all_edges_fields_to_fetch_as_list(&self) -> Vec<String> {
+    pub fn get_all_edges_fields_as_list_to_return(&self) -> Vec<String> {
         // Guaranteed to be unique
         let mut unique_fields = HashSet::new();
         for fields in self.e_collections.values().flat_map(|c| c.fields.clone()) {
             unique_fields.insert(fields);
         }
-
-        if unique_fields.is_empty() && !self.load_config.load_all_edge_attributes {
-            unique_fields.insert("_from".to_string());
-            unique_fields.insert("_to".to_string());
-        }
-
-        if unique_fields.contains("@collection_name") && !unique_fields.contains("_id") {
-            unique_fields.insert("_id".to_string());
-        }
-
         unique_fields.into_iter().collect()
+    }
+
+    pub fn get_all_edges_fields_to_fetch_as_list(&self) -> Vec<String> {
+        // Guaranteed to be unique
+        // This method adds required fields if they are not present,
+        // which need to be available to deliver the required resources.
+
+        let mut unique_fields = self.get_all_edges_fields_as_list_to_return();
+        if unique_fields.is_empty() && !self.load_config.load_all_edge_attributes {
+            unique_fields.insert(0, "_to".to_string());
+            unique_fields.insert(0, "_from".to_string());
+        }
+
+        if unique_fields.contains(&"@collection_name".to_string())
+            && !unique_fields.contains(&"_id".to_string())
+        {
+            // Compared to vertices, this is not a mandatory field.
+            unique_fields.insert(0, "_id".to_string());
+        }
+
+        unique_fields
     }
 
     pub fn produce_vertex_projections(&self) -> Option<HashMap<String, Vec<String>>> {
