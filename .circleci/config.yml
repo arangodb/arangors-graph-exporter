@@ -53,6 +53,8 @@ jobs:
         type: string
       db-version:
         type: string
+      db-edition:
+        type: string
     executor: generate-executor
     steps:
       - checkout
