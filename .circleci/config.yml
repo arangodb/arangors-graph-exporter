@@ -19,7 +19,8 @@ workflows:
           matrix:
             parameters:
               db-mode: [ "single", "cluster" ]
-              db-version: [ "3.10", "3.11", "3.12" ]
+              db-version: [ "3.10", "3.11", "3.12", "nightly" ]
+              db-edition: [ "community", "enterprise" ]
 
 jobs:
   build:
@@ -61,11 +62,27 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             source $HOME/.cargo/env
       - run:
+          name: Set Docker Image
+          command: |
+            if [[ "<< parameters.db-version >>" == "nightly" ]]; then
+              if [[ "<< parameters.db-edition >>" == "enterprise" ]]; then
+                echo 'export DOCKER_IMAGE="docker.io/arangodb/enterprise-preview:devel-nightly"' >> $BASH_ENV
+              else
+                echo 'export DOCKER_IMAGE="docker.io/arangodb/arangodb-preview:devel-nightly"' >> $BASH_ENV
+              fi
+            else
+              if [[ "<< parameters.db-edition >>" == "enterprise" ]]; then
+                echo 'export DOCKER_IMAGE="docker.io/arangodb/enterprise:<< parameters.db-version >>"' >> $BASH_ENV
+              else
+                echo 'export DOCKER_IMAGE="docker.io/arangodb/arangodb:<< parameters.db-version >>"' >> $BASH_ENV
+              fi
+            fi
+      - run:
           name: Start Database
           command: ./docker/start_db.sh
           environment:
             STARTER_MODE: << parameters.db-mode >>
-            DOCKER_IMAGE: docker.io/arangodb/arangodb:<< parameters.db-version >>
+            #DOCKER_IMAGE: docker.io/arangodb/arangodb:<< parameters.db-version >>
             ARANGODB_DB_URL: http://172.28.0.1:8529
       - run:
           name: Cargo Test
