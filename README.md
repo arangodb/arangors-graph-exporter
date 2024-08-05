@@ -1,2 +1,3 @@
-# lightning
-Rust implementation to pull data fast and parallel out of ArangoDB
+# arangors-graph-exporter
+
+Rust based driver to pull graph data fast and parallel out of ArangoDB.
