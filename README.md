@@ -4,6 +4,7 @@ This Rust-based library provides a high-performance and parallel way to load dat
 
 [![Crates.io][crates-badge]][crates-url]
 [![MIT licensed][mit-badge]][mit-url]
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/arangodb/arangors-graph-exporter/tree/main.svg?style=shield&circle-token=CCIPRJ_7429hLhBbSuHBq59JVpQYZ_1339fa571ff52f0bd39712e72c637b1b3596b95a)](https://dl.circleci.com/status-badge/redirect/gh/arangodb/arangors-graph-exporter/tree/main)
 
 [crates-url]: https://crates.io/crates/arangors-graph-exporter
 [crates-badge]: https://img.shields.io/crates/v/arangors-graph-exporter.svg
