@@ -1,6 +1,6 @@
 use arangors::graph::{EdgeDefinition, Graph};
 use arangors::Connection;
-use arangors-graph-exporter::{
+use arangors_graph_exporter::{
     CollectionInfo, DataLoadConfiguration, DataLoadConfigurationBuilder, DatabaseConfiguration,
     DatabaseConfigurationBuilder, GraphLoader,
 };
@@ -8,7 +8,7 @@ use serial_test::serial;
 
 use arangors::connection::Version;
 use arangors::document::options::InsertOptions;
-use arangors-graph-exporter::errors::GraphLoaderError;
+use arangors_graph_exporter::errors::GraphLoaderError;
 use rstest::fixture;
 use serde_json::Value;
 use std::env;
