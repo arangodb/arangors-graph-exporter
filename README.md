@@ -2,6 +2,16 @@
 
 This Rust-based library provides a high-performance and parallel way to load data from ArangoDB. It supports loading both named graphs and custom graphs, with options to specify which vertex and edge attributes to load.
 
+[![Crates.io][crates-badge]][crates-url]
+[![MIT licensed][mit-badge]][mit-url]
+
+[crates-url]: https://crates.io/crates/arangors-graph-exporter
+[crates-badge]: https://img.shields.io/crates/v/arangors-graph-exporter.svg
+[mit-url]: https://github.com/arangodb/arangors-graph-exporter/blob/main/LICENSE
+[mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
+
+[API Docs](https://arangodb.github.io/arangors-graph-exporter/arangors_graph_exporter/index.html)
+
 ## Installation
 
 Add the following to your `Cargo.toml`:
