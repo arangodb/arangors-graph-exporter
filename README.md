@@ -8,7 +8,7 @@ Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-arangodb-graph-loader = "0.0.5"
+arangodb-graph-loader = "0.0.6"
 ```
 
 ## Usage

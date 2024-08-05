@@ -3,7 +3,7 @@ services:
   # ONLY USED FOR LOCAL DEVELOPMENT
   # TO BE ABLE TO QUICKLY START DIFFERENT ARANGODB INSTANCES WITH DOCKER
 
-  #lightning_arangodb_single_server:
+  #arangors-graph-exporter_arangodb_single_server:
   #  container_name: arangodb-single-server-instance
   #  image: arangodb/arangodb
   #  ports:
@@ -17,7 +17,7 @@ services:
   #    - ./secrets.jwt/token:/secrets/token:ro
   #  command: arangodb --starter.mode=single --auth.jwt-secret=./secrets/token
 
-  #lightning_arangodb_cluster:
+  #arangors-graph-exporter_arangodb_cluster:
   #  container_name: arangodb-cluster-instance
   #  image: arangodb/arangodb
   #  ports:
@@ -29,7 +29,7 @@ services:
   #    - ARANGO_NO_AUTH=false
   #  command: arangodb --mode=cluster --local=true --auth.jwt-secret=./secrets/token
 
-  #lightning_arangodb_cluster_3.10:
+  #arangors-graph-exporter_arangodb_cluster_3.10:
   #  container_name: arangodb-cluster-instance-3-10
   #  image: arangodb/arangodb:3.10
   #  ports:
@@ -41,7 +41,7 @@ services:
   #    - ARANGO_NO_AUTH=false
   #  command: arangodb --mode=cluster --local=true --auth.jwt-secret=./secrets/token
 
-  lightning_arangodb_cluster_3.11:
+  arangors-graph-exporter_arangodb_cluster_3.11:
     container_name: arangodb-cluster-instance-3-11
     image: arangodb/arangodb:3.11
     ports:

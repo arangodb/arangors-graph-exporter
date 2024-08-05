@@ -28,7 +28,7 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Compile lightning
+          name: Compile arangors-graph-exporter
           command: cargo build --release
 
   lint-rust:
