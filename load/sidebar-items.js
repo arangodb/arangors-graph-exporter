@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["load_custom_graph","load_named_graph"]};

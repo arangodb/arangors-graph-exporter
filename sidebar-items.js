@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["client","config","errors","graph_loader","load","request","types"]};

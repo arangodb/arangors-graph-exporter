@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["DeploymentType","LoadStrategy"],"struct":["DeploymentInfo","SupportInfo","VersionInformation"]};

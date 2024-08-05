@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["build_client","make_url"],"mod":["auth","config"]};
