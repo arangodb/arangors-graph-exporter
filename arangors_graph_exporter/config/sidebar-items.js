@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["DataLoadConfiguration","DataLoadConfigurationBuilder","DatabaseConfiguration","DatabaseConfigurationBuilder"]};
