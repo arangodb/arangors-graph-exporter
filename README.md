@@ -2,6 +2,20 @@
 
 This Rust-based library provides a high-performance and parallel way to load data from ArangoDB. It supports loading both named graphs and custom graphs, with options to specify which vertex and edge attributes to load.
 
+[![Crates.io][crates-badge]][crates-url]
+[![MIT licensed][mit-badge]][mit-url]
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/arangodb/arangors-graph-exporter/tree/main.svg?style=shield&circle-token=CCIPRJ_7429hLhBbSuHBq59JVpQYZ_1339fa571ff52f0bd39712e72c637b1b3596b95a)](https://dl.circleci.com/status-badge/redirect/gh/arangodb/arangors-graph-exporter/tree/main)
+
+[crates-url]: https://crates.io/crates/arangors-graph-exporter
+[crates-badge]: https://img.shields.io/crates/v/arangors-graph-exporter.svg
+[mit-url]: https://github.com/arangodb/arangors-graph-exporter/blob/main/LICENSE
+[mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
+
+[API Docs](https://arangodb.github.io/arangors-graph-exporter/arangors_graph_exporter/index.html) |
+[ArangoDB Docs](https://docs.arangodb.com/stable) |
+[ArangoDB](https://www.arangodb.com)
+
+
 ## Installation
 
 Add the following to your `Cargo.toml`:
@@ -152,13 +166,31 @@ match graph_loader.do_vertices(handle_vertices).await {
 
 This project is licensed under the MIT License.
 
+## Getting Help
+
+First, see if the answer to your question can be found in the [API documentation].
+If your question couldn't be solved, please feel free to pick one of those resources: 
+
+- Please use GitHub for feature requests and bug reports:
+  [https://github.com/arangodb/arangors-graph-exporter/issues](https://github.com/arangodb/arangors-graph-exporter/issues)
+
+- Ask questions about the driver, Rust, usage scenarios, etc. on StackOverflow:
+  [https://stackoverflow.com/questions/tagged/arangodb](https://stackoverflow.com/questions/tagged/arangodb)
+
+- Chat with the community and the developers on Slack:
+  [https://arangodb-community.slack.com/](https://arangodb-community.slack.com/)
+
+- Learn more about ArangoDB with our YouTube channel: 
+  [https://www.youtube.com/@ArangoDB](https://www.youtube.com/@ArangoDB)
+
+- Follow us on X to stay up to date:
+  [https://x.com/arangodb](https://x.com/arangodb)
+
+- Find out more about our community: [https://www.arangodb.com/community](https://www.arangodb.com/community/)
+
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request.
-
-## Contact
-
-For any questions or issues, please contact the repository maintainer.
 
 ---
 
