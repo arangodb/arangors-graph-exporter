@@ -24,7 +24,7 @@ jobs:
         run: rm -rf ./docs
 
       - name: Create index.html file manually
-        run: echo "<meta http-equiv=\"refresh\" content=\"0; url=build_wheel\">" > target/doc/index.html
+        run: echo '<meta http-equiv="refresh" content="0;url=arangors_graph_exporter/index.html">' > target/doc/index.html
 
       - name: Copy inner docs file to docs folder
         run: cp -r target/doc ./docs
