@@ -1,1 +1,1 @@
-window.ALL_CRATES = ["lightning"];
+window.ALL_CRATES = ["arangors_graph_exporter"];
