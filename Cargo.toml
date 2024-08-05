@@ -4,7 +4,7 @@ version = "0.0.6"
 edition = "2021"
 
 description = "Provides lightning-fast graph data access to ArangoDB"
-license = "MIT License"
+license = "MIT"
 repository = "https://github.com/arangodb/arangors-graph-exporter"
 
 [dependencies]
