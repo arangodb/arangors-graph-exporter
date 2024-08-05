@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["SCDynamicStore","SCDynamicStoreBuilder","SCDynamicStoreCallBackContext"],"type":["SCDynamicStoreCallBackT"]};

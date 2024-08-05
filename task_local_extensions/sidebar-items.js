@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["get_local_item","set_local_item","with_extensions"],"struct":["Extensions"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_arangodb_response","handle_arangodb_response_with_parsed_body"]};
