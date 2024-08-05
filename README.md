@@ -192,10 +192,6 @@ If your question couldn't be solved, please feel free to pick one of those resou
 
 Contributions are welcome! Please open an issue or submit a pull request.
 
-## Contact
-
-For any questions or issues, please contact the repository maintainer.
-
 ---
 
 This documentation provides a comprehensive overview of the API and usage of the Rust-based ArangoDB graph loader.
