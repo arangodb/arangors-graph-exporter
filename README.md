@@ -166,6 +166,28 @@ match graph_loader.do_vertices(handle_vertices).await {
 
 This project is licensed under the MIT License.
 
+## Getting Help
+
+First, see if the answer to your question can be found in the [API documentation].
+If your question couldn't be solved, please feel free to pick one of those resources: 
+
+- Please use GitHub for feature requests and bug reports:
+  [https://github.com/arangodb/arangors-graph-exporter/issues](https://github.com/arangodb/arangors-graph-exporter/issues)
+
+- Ask questions about the driver, Rust, usage scenarios, etc. on StackOverflow:
+  [https://stackoverflow.com/questions/tagged/arangodb](https://stackoverflow.com/questions/tagged/arangodb)
+
+- Chat with the community and the developers on Slack:
+  [https://arangodb-community.slack.com/](https://arangodb-community.slack.com/)
+
+- Learn more about ArangoDB with our YouTube channel: 
+  [https://www.youtube.com/@ArangoDB](https://www.youtube.com/@ArangoDB)
+
+- Follow us on X to stay up to date:
+  [https://x.com/arangodb](https://x.com/arangodb)
+
+- Find out more about our community: [https://www.arangodb.com/community](https://www.arangodb.com/community/)
+
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request.
