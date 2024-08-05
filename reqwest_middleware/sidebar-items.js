@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Error"],"struct":["ClientBuilder","ClientWithMiddleware","Extension","Next","RequestBuilder"],"trait":["Middleware","RequestInitialiser"],"type":["Result"]};

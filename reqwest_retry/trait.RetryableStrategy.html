@@ -1,0 +1,87 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="A strategy to create a `Retryable` from a `Result&lt;reqwest::Response, reqwest_middleware::Error&gt;`"><title>RetryableStrategy in reqwest_retry - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-081576b923113409.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="reqwest_retry" data-themes="" data-resource-suffix="" data-rustdoc-version="1.79.0 (129f3b996 2024-06-10)" data-channel="1.79.0" data-search-js="search-bf21c90c8c1d92b1.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-e32f0c247825364d.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-20a3ad099b048cf2.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-09095024cf37855e.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc trait"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../reqwest_retry/index.html">reqwest_retry</a><span class="version">0.3.0</span></h2></div><h2 class="location"><a href="#">RetryableStrategy</a></h2><div class="sidebar-elems"><section><h3><a href="#required-methods">Required Methods</a></h3><ul class="block"><li><a href="#tymethod.handle">handle</a></li></ul><h3><a href="#implementors">Implementors</a></h3></section><h2><a href="index.html">In crate reqwest_retry</a></h2></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><nav class="sub"><form class="search-form"><span></span><div id="sidebar-button" tabindex="-1"><a href="../reqwest_retry/all.html" title="show sidebar"></a></div><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Type ‘S’ or ‘/’ to search, ‘?’ for more options…" type="search"><div id="help-button" tabindex="-1"><a href="../help.html" title="help">?</a></div><div id="settings-menu" tabindex="-1"><a href="../settings.html" title="settings">Settings</a></div></form></nav><section id="main-content" class="content"><div class="main-heading"><h1>Trait <a href="index.html">reqwest_retry</a>::<wbr><a class="trait" href="#">RetryableStrategy</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../src/reqwest_retry/retryable_strategy.rs.html#90-92">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><pre class="rust item-decl"><code>pub trait RetryableStrategy {
+    // Required method
+    fn <a href="#tymethod.handle" class="fn">handle</a>(&amp;self, res: &amp;<a class="enum" href="https://doc.rust-lang.org/1.79.0/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="../reqwest/async_impl/response/struct.Response.html" title="struct reqwest::async_impl::response::Response">Response</a>, <a class="enum" href="../reqwest_middleware/error/enum.Error.html" title="enum reqwest_middleware::error::Error">Error</a>&gt;) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.79.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="enum" href="enum.Retryable.html" title="enum reqwest_retry::Retryable">Retryable</a>&gt;;
+}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A strategy to create a <a href="enum.Retryable.html" title="enum reqwest_retry::Retryable"><code>Retryable</code></a> from a <a href="https://doc.rust-lang.org/1.79.0/core/result/enum.Result.html" title="enum core::result::Result"><code>Result&lt;reqwest::Response, reqwest_middleware::Error&gt;</code></a></p>
+<p>A <a href="trait.RetryableStrategy.html" title="trait reqwest_retry::RetryableStrategy"><code>RetryableStrategy</code></a> has a single <code>handler</code> functions.
+The result of calling the request could be:</p>
+<ul>
+<li><a href="../reqwest/async_impl/response/struct.Response.html" title="struct reqwest::async_impl::response::Response"><code>reqwest::Response</code></a> In case the request has been sent and received correctly
+This could however still mean that the server responded with a erroneous response.
+For example a HTTP statuscode of 500</li>
+<li><a href="../reqwest_middleware/error/enum.Error.html" title="enum reqwest_middleware::error::Error"><code>reqwest_middleware::Error</code></a> In this case the request actually failed.
+This could, for example, be caused by a timeout on the connection.</li>
+</ul>
+<p>Example:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>reqwest_retry::{default_on_request_failure, policies::ExponentialBackoff, Retryable, RetryableStrategy, RetryTransientMiddleware};
+<span class="kw">use </span>reqwest::{Request, Response};
+<span class="kw">use </span>reqwest_middleware::{ClientBuilder, Middleware, Next, <span class="prelude-ty">Result</span>};
+<span class="kw">use </span>task_local_extensions::Extensions;
+
+<span class="comment">// Log each request to show that the requests will be retried
+</span><span class="kw">struct </span>LoggingMiddleware;
+
+<span class="attr">#[async_trait::async_trait]
+</span><span class="kw">impl </span>Middleware <span class="kw">for </span>LoggingMiddleware {
+    <span class="kw">async fn </span>handle(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        req: Request,
+        extensions: <span class="kw-2">&amp;mut </span>Extensions,
+        next: Next&lt;<span class="lifetime">'_</span>&gt;,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;Response&gt; {
+        <span class="macro">println!</span>(<span class="string">"Request started {}"</span>, req.url());
+        <span class="kw">let </span>res = next.run(req, extensions).<span class="kw">await</span>;
+        <span class="macro">println!</span>(<span class="string">"Request finished"</span>);
+        res
+    }
+}
+
+<span class="comment">// Just a toy example, retry when the successful response code is 201, else do nothing.
+</span><span class="kw">struct </span>Retry201;
+<span class="kw">impl </span>RetryableStrategy <span class="kw">for </span>Retry201 {
+    <span class="kw">fn </span>handle(<span class="kw-2">&amp;</span><span class="self">self</span>, res: <span class="kw-2">&amp;</span><span class="prelude-ty">Result</span>&lt;reqwest::Response&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;Retryable&gt; {
+         <span class="kw">match </span>res {
+             <span class="comment">// retry if 201
+             </span><span class="prelude-val">Ok</span>(success) <span class="kw">if </span>success.status() == <span class="number">201 </span>=&gt; <span class="prelude-val">Some</span>(Retryable::Transient),
+             <span class="comment">// otherwise do not retry a successful request
+             </span><span class="prelude-val">Ok</span>(success) =&gt; <span class="prelude-val">None</span>,
+             <span class="comment">// but maybe retry a request failure
+             </span><span class="prelude-val">Err</span>(error) =&gt; default_on_request_failure(error),
+        }
+    }
+}
+
+<span class="attr">#[tokio::main]
+</span><span class="kw">async fn </span>main() {
+    <span class="comment">// Exponential backoff with max 2 retries
+    </span><span class="kw">let </span>retry_policy = ExponentialBackoff::builder()
+        .build_with_max_retries(<span class="number">2</span>);
+     
+    <span class="comment">// Create the actual middleware, with the exponential backoff and custom retry stategy.
+    </span><span class="kw">let </span>ret_s = RetryTransientMiddleware::new_with_policy_and_strategy(
+        retry_policy,
+        Retry201,
+    );
+
+    <span class="kw">let </span>client = ClientBuilder::new(reqwest::Client::new())
+        <span class="comment">// Retry failed requests.
+        </span>.with(ret_s)
+        <span class="comment">// Log the requests
+        </span>.with(LoggingMiddleware)
+        .build();
+
+    <span class="comment">// Send request which should get a 201 response. So it will be retried
+    </span><span class="kw">let </span>r = client   
+        .get(<span class="string">"https://httpbin.org/status/201"</span>)
+        .send()
+        .<span class="kw">await</span>;
+    <span class="macro">println!</span>(<span class="string">"{:?}"</span>, r);
+
+    <span class="comment">// Send request which should get a 200 response. So it will not be retried
+    </span><span class="kw">let </span>r = client   
+        .get(<span class="string">"https://httpbin.org/status/200"</span>)
+        .send()
+        .<span class="kw">await</span>;
+    <span class="macro">println!</span>(<span class="string">"{:?}"</span>, r);
+}</code></pre></div>
+</div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><section id="tymethod.handle" class="method"><a class="src rightside" href="../src/reqwest_retry/retryable_strategy.rs.html#91">source</a><h4 class="code-header">fn <a href="#tymethod.handle" class="fn">handle</a>(&amp;self, res: &amp;<a class="enum" href="https://doc.rust-lang.org/1.79.0/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="../reqwest/async_impl/response/struct.Response.html" title="struct reqwest::async_impl::response::Response">Response</a>, <a class="enum" href="../reqwest_middleware/error/enum.Error.html" title="enum reqwest_middleware::error::Error">Error</a>&gt;) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.79.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="enum" href="enum.Retryable.html" title="enum reqwest_retry::Retryable">Retryable</a>&gt;</h4></section></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"><section id="impl-RetryableStrategy-for-DefaultRetryableStrategy" class="impl"><a class="src rightside" href="../src/reqwest_retry/retryable_strategy.rs.html#97-104">source</a><a href="#impl-RetryableStrategy-for-DefaultRetryableStrategy" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.RetryableStrategy.html" title="trait reqwest_retry::RetryableStrategy">RetryableStrategy</a> for <a class="struct" href="struct.DefaultRetryableStrategy.html" title="struct reqwest_retry::DefaultRetryableStrategy">DefaultRetryableStrategy</a></h3></section></div><script src="../trait.impl/reqwest_retry/retryable_strategy/trait.RetryableStrategy.js" async></script></section></div></main></body></html>
