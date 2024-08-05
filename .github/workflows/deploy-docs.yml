@@ -20,8 +20,17 @@ jobs:
       - name: Build Documentation
         run: cargo doc --no-deps
 
+      - name: Clear docs folder
+        run: rm -rf ./docs
+
+      - name: Create index.html file manually
+        run: echo "<meta http-equiv=\"refresh\" content=\"0; url=build_wheel\">" > target/doc/index.html
+
+      - name: Copy inner docs file to docs folder
+        run: cp -r target/doc ./docs
+
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./target/doc/arangors_graph_exporter
+          publish_dir: ./docs
