@@ -23,7 +23,7 @@ Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-arangodb-graph-loader = "0.0.6"
+arangors-graph-exporter = "0.0.6"
 ```
 
 ## Usage
@@ -40,7 +40,7 @@ A named graph is a graph in ArangoDB that has a name and its graph definition is
 To initialize a graph loader for a named graph,  use the `GraphLoader::new_named` method.
 
 ```rust
-use arangodb_graph_loader::{DatabaseConfiguration, DataLoadConfiguration, GraphLoader, GraphLoaderError};
+use arangors_graph_exporter::{DatabaseConfiguration, DataLoadConfiguration, GraphLoader, GraphLoaderError};
 
 async fn create_named_graph_loader() -> Result<GraphLoader, GraphLoaderError> {
     let db_config = DatabaseConfiguration::new(/* parameters */);
@@ -61,7 +61,7 @@ stored in the database.
 To create a graph loader for a custom graph:
 
 ```rust
-use arangodb_graph_loader::{DatabaseConfiguration, DataLoadConfiguration, GraphLoader, GraphLoaderError, CollectionInfo};
+use arangors_graph_exporter::{DatabaseConfiguration, DataLoadConfiguration, GraphLoader, GraphLoaderError, CollectionInfo};
 
 async fn create_custom_graph_loader() -> Result<GraphLoader, GraphLoaderError> {
     let db_config = DatabaseConfiguration::new(/* parameters */);
