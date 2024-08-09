@@ -605,7 +605,6 @@ async fn init_named_graph_loader_with_data_all_v_and_e_attributes_all_by_boolean
             assert_eq!(edge_json_arr.len(), 1);
             assert_eq!(edge_field_names.len(), 0);
             let edge = &edge_json_arr[0];
-            println!("Edge is {:?}", edge);
             assert_eq!(6, edge.as_object().unwrap().len());
 
             // x, y, z and _id, _key, _rev
