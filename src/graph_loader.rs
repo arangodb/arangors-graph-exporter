@@ -582,8 +582,10 @@ impl GraphLoader {
                     }
                     Err(e) => {
                         // The thread panicked
-                        eprintln!("Thread panicked: {:?}", e);
-                        return Err(GraphLoaderError::from("Thread panicked".to_string()));
+                        eprintln!("Thread panicked in do_vertices: {:?}", e);
+                        return Err(GraphLoaderError::from(
+                            "Thread panicked in do_vertices".to_string(),
+                        ));
                     }
                 }
             }
@@ -871,8 +873,10 @@ impl GraphLoader {
                 }
                 Err(e) => {
                     // The thread panicked
-                    eprintln!("Thread panicked: {:?}", e);
-                    return Err(GraphLoaderError::from("Thread panicked".to_string()));
+                    eprintln!("Thread panicked in do_edges: {:?}", e);
+                    return Err(GraphLoaderError::from(
+                        "Thread panicked in do_edges".to_string(),
+                    ));
                 }
             }
         }
