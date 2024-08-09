@@ -23,7 +23,7 @@ Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-arangors-graph-exporter = "0.0.6"
+arangors-graph-exporter = "0.0.7"
 ```
 
 ## Usage

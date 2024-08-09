@@ -1,6 +1,6 @@
 [package]
 name = "arangors-graph-exporter"
-version = "0.0.6"
+version = "0.0.7"
 edition = "2021"
 
 description = "Provides lightning-fast graph data access to ArangoDB"
