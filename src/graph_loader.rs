@@ -571,7 +571,21 @@ impl GraphLoader {
 
             info!("{:?} Got all data, processing...", SystemTime::now());
             for c in consumers {
-                let _guck = c.join();
+                match c.join() {
+                    Ok(Ok(())) => {
+                        // The thread completed successfully and returned Ok
+                    }
+                    Ok(Err(e)) => {
+                        // The thread completed but returned an error
+                        eprintln!("Thread returned error: {:?}", e);
+                        return Err(e); // Propagate the error
+                    }
+                    Err(e) => {
+                        // The thread panicked
+                        eprintln!("Thread panicked: {:?}", e);
+                        return Err(GraphLoaderError::from("Thread panicked".to_string()));
+                    }
+                }
             }
         }
         Ok(())
@@ -846,7 +860,21 @@ impl GraphLoader {
             std::time::SystemTime::now()
         );
         for c in consumers {
-            let _guck = c.join();
+            match c.join() {
+                Ok(Ok(())) => {
+                    // The thread completed successfully and returned Ok
+                }
+                Ok(Err(e)) => {
+                    // The thread completed but returned an error
+                    eprintln!("Thread returned error: {:?}", e);
+                    return Err(e); // Propagate the error
+                }
+                Err(e) => {
+                    // The thread panicked
+                    eprintln!("Thread panicked: {:?}", e);
+                    return Err(GraphLoaderError::from("Thread panicked".to_string()));
+                }
+            }
         }
         Ok(())
     }
