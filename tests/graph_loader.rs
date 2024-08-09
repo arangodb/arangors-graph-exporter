@@ -255,7 +255,9 @@ async fn init_named_graph_loader_with_data() {
     teardown().await;
 }
 
-fn get_attribute_position(field_names: &Vec<String>, attribute: &str) -> usize {
+fn get_attribute_position_from_fields(field_names: &Vec<String>, attribute: &str) -> usize {
+    assert!(!field_names.is_empty());
+    assert!(field_names.contains(&attribute.to_string()));
     field_names.iter().position(|x| x == attribute).unwrap()
 }
 
@@ -300,13 +302,13 @@ async fn init_named_graph_loader_with_data_all_v_and_e_attributes_manually_set()
             assert_eq!(vertex.len(), 3);
             assert_eq!(vertex.len(), vertex_field_names.len());
 
-            let x = &vertex[get_attribute_position(vertex_field_names, "x")]
+            let x = &vertex[get_attribute_position_from_fields(vertex_field_names, "x")]
                 .as_u64()
                 .unwrap();
-            let y = &vertex[get_attribute_position(vertex_field_names, "y")]
+            let y = &vertex[get_attribute_position_from_fields(vertex_field_names, "y")]
                 .as_u64()
                 .unwrap();
-            let z = &vertex[get_attribute_position(vertex_field_names, "z")]
+            let z = &vertex[get_attribute_position_from_fields(vertex_field_names, "z")]
                 .as_u64()
                 .unwrap();
             let expected_x_value = (v_index + 1) as u64;
@@ -358,13 +360,13 @@ async fn init_named_graph_loader_with_data_all_v_and_e_attributes_manually_set()
             assert_eq!(edge.len(), 3);
             assert_eq!(edge.len(), edge_field_names.len());
 
-            let x = &edge[get_attribute_position(edge_field_names, "x")]
+            let x = &edge[get_attribute_position_from_fields(edge_field_names, "x")]
                 .as_u64()
                 .unwrap();
-            let y = &edge[get_attribute_position(edge_field_names, "y")]
+            let y = &edge[get_attribute_position_from_fields(edge_field_names, "y")]
                 .as_u64()
                 .unwrap();
-            let z = &edge[get_attribute_position(edge_field_names, "z")]
+            let z = &edge[get_attribute_position_from_fields(edge_field_names, "z")]
                 .as_u64()
                 .unwrap();
             let expected_x_value = (e_index + 1) as u64;
@@ -429,7 +431,7 @@ async fn init_named_graph_loader_with_data_all_v_and_e_collection_name_attribute
             assert_eq!(vertex.len(), vertex_field_names.len());
 
             let collection_name = &vertex
-                [get_attribute_position(vertex_field_names, "@collection_name")]
+                [get_attribute_position_from_fields(vertex_field_names, "@collection_name")]
             .as_str()
             .unwrap();
             let expected_collection_name = VERTEX_COLLECTION;
@@ -472,11 +474,11 @@ async fn init_named_graph_loader_with_data_all_v_and_e_collection_name_attribute
         }
 
         for (_e_index, edge) in columns.iter().enumerate() {
-            assert_eq!(edge.len(), 3);
-            assert_eq!(edge.len(), edge_field_names.len());
+            assert_eq!(edge.len(), 1);
+            assert_eq!(edge_field_names.len(), 1);
 
             let collection_name = &edge
-                [get_attribute_position(edge_field_names, "@collection_name")]
+                [get_attribute_position_from_fields(edge_field_names, "@collection_name")]
             .as_str()
             .unwrap();
             let expected_collection_name = EDGE_COLLECTION;
@@ -533,15 +535,28 @@ async fn init_named_graph_loader_with_data_all_v_and_e_attributes_all_by_boolean
         for (v_index, vertex_json_arr) in columns.iter().enumerate() {
             assert_eq!(vertex_json_arr.len(), 1);
             let vertex = &vertex_json_arr[0];
-            assert_eq!(3, vertex.as_object().unwrap().len());
+            // x, y, y including _key and _rev
+            assert_eq!(5, vertex.as_object().unwrap().len());
 
-            let x = &vertex[get_attribute_position(vertex_field_names, "x")]
+            let x = &vertex
+                .as_object()
+                .unwrap()
+                .get("x")
+                .unwrap()
                 .as_u64()
                 .unwrap();
-            let y = &vertex[get_attribute_position(vertex_field_names, "y")]
+            let y = &vertex
+                .as_object()
+                .unwrap()
+                .get("y")
+                .unwrap()
                 .as_u64()
                 .unwrap();
-            let z = &vertex[get_attribute_position(vertex_field_names, "z")]
+            let z = &vertex
+                .as_object()
+                .unwrap()
+                .get("z")
+                .unwrap()
                 .as_u64()
                 .unwrap();
             let expected_x_value = (v_index + 1) as u64;
@@ -588,17 +603,30 @@ async fn init_named_graph_loader_with_data_all_v_and_e_attributes_all_by_boolean
 
         for (e_index, edge_json_arr) in columns.iter().enumerate() {
             assert_eq!(edge_json_arr.len(), 1);
-            assert_eq!(edge_json_arr.len(), edge_field_names.len());
+            assert_eq!(edge_field_names.len(), 0);
             let edge = &edge_json_arr[0];
-            assert_eq!(3, edge.as_object().unwrap().len());
+            assert_eq!(6, edge.as_object().unwrap().len());
 
-            let x = &edge[get_attribute_position(edge_field_names, "x")]
+            // x, y, z and _id, _key, _rev
+            let x = &edge
+                .as_object()
+                .unwrap()
+                .get("x")
+                .unwrap()
                 .as_u64()
                 .unwrap();
-            let y = &edge[get_attribute_position(edge_field_names, "y")]
+            let y = &edge
+                .as_object()
+                .unwrap()
+                .get("y")
+                .unwrap()
                 .as_u64()
                 .unwrap();
-            let z = &edge[get_attribute_position(edge_field_names, "z")]
+            let z = &edge
+                .as_object()
+                .unwrap()
+                .get("z")
+                .unwrap()
                 .as_u64()
                 .unwrap();
             let expected_x_value = (e_index + 1) as u64;
