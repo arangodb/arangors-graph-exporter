@@ -754,15 +754,11 @@ impl GraphLoader {
                                 edge.as_object_mut().unwrap().remove("_to");
                                 edge_json.push(vec![edge]);
                             } else {
-                                let id: &Value = &edge["_id"];
-                                let idstr: &String = match id {
-                                    Value::String(i) => i,
-                                    _ => {
-                                        return Err(GraphLoaderError::JsonParseError(format!(
-                                            "JSON is no object with a string _id attribute:\n{}",
-                                            edge
-                                        )));
-                                    }
+                                // it is not guaranteed that the _id field is present
+                                let id = &edge["_id"];
+                                let idstr: Option<&String> = match id {
+                                    Value::String(i) => Some(i),
+                                    _ => None,
                                 };
 
                                 // If we get here, we have to extract the field
@@ -770,7 +766,11 @@ impl GraphLoader {
                                 // to edge_json:
                                 let get_value = |v: &Value, field: &str| -> Value {
                                     if field == "@collection_name" {
-                                        Value::String(collection_name_from_id(idstr))
+                                        if let Some(id) = idstr {
+                                            Value::String(collection_name_from_id(id))
+                                        } else {
+                                            Value::String("n/A - _id is missing".to_string())
+                                        }
                                     } else {
                                         v[field].clone()
                                     }
