@@ -571,7 +571,23 @@ impl GraphLoader {
 
             info!("{:?} Got all data, processing...", SystemTime::now());
             for c in consumers {
-                let _guck = c.join();
+                match c.join() {
+                    Ok(Ok(())) => {
+                        // The thread completed successfully and returned Ok
+                    }
+                    Ok(Err(e)) => {
+                        // The thread completed but returned an error
+                        eprintln!("Thread returned error: {:?}", e);
+                        return Err(e); // Propagate the error
+                    }
+                    Err(e) => {
+                        // The thread panicked
+                        eprintln!("Thread panicked in do_vertices: {:?}", e);
+                        return Err(GraphLoaderError::from(
+                            "Thread panicked in do_vertices".to_string(),
+                        ));
+                    }
+                }
             }
         }
         Ok(())
@@ -738,15 +754,11 @@ impl GraphLoader {
                                 edge.as_object_mut().unwrap().remove("_to");
                                 edge_json.push(vec![edge]);
                             } else {
-                                let id: &Value = &edge["_id"];
-                                let idstr: &String = match id {
-                                    Value::String(i) => i,
-                                    _ => {
-                                        return Err(GraphLoaderError::JsonParseError(format!(
-                                            "JSON is no object with a string _id attribute:\n{}",
-                                            edge
-                                        )));
-                                    }
+                                // it is not guaranteed that the _id field is present
+                                let id = &edge["_id"];
+                                let idstr: Option<&String> = match id {
+                                    Value::String(i) => Some(i),
+                                    _ => None,
                                 };
 
                                 // If we get here, we have to extract the field
@@ -754,7 +766,11 @@ impl GraphLoader {
                                 // to edge_json:
                                 let get_value = |v: &Value, field: &str| -> Value {
                                     if field == "@collection_name" {
-                                        Value::String(collection_name_from_id(idstr))
+                                        if let Some(id) = idstr {
+                                            Value::String(collection_name_from_id(id))
+                                        } else {
+                                            Value::String("n/A - _id is missing".to_string())
+                                        }
                                     } else {
                                         v[field].clone()
                                     }
@@ -846,7 +862,23 @@ impl GraphLoader {
             std::time::SystemTime::now()
         );
         for c in consumers {
-            let _guck = c.join();
+            match c.join() {
+                Ok(Ok(())) => {
+                    // The thread completed successfully and returned Ok
+                }
+                Ok(Err(e)) => {
+                    // The thread completed but returned an error
+                    eprintln!("Thread returned error: {:?}", e);
+                    return Err(e); // Propagate the error
+                }
+                Err(e) => {
+                    // The thread panicked
+                    eprintln!("Thread panicked in do_edges: {:?}", e);
+                    return Err(GraphLoaderError::from(
+                        "Thread panicked in do_edges".to_string(),
+                    ));
+                }
+            }
         }
         Ok(())
     }
