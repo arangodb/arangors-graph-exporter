@@ -1074,6 +1074,39 @@
 <a href="#1074" id="1074">1074</a>
 <a href="#1075" id="1075">1075</a>
 <a href="#1076" id="1076">1076</a>
+<a href="#1077" id="1077">1077</a>
+<a href="#1078" id="1078">1078</a>
+<a href="#1079" id="1079">1079</a>
+<a href="#1080" id="1080">1080</a>
+<a href="#1081" id="1081">1081</a>
+<a href="#1082" id="1082">1082</a>
+<a href="#1083" id="1083">1083</a>
+<a href="#1084" id="1084">1084</a>
+<a href="#1085" id="1085">1085</a>
+<a href="#1086" id="1086">1086</a>
+<a href="#1087" id="1087">1087</a>
+<a href="#1088" id="1088">1088</a>
+<a href="#1089" id="1089">1089</a>
+<a href="#1090" id="1090">1090</a>
+<a href="#1091" id="1091">1091</a>
+<a href="#1092" id="1092">1092</a>
+<a href="#1093" id="1093">1093</a>
+<a href="#1094" id="1094">1094</a>
+<a href="#1095" id="1095">1095</a>
+<a href="#1096" id="1096">1096</a>
+<a href="#1097" id="1097">1097</a>
+<a href="#1098" id="1098">1098</a>
+<a href="#1099" id="1099">1099</a>
+<a href="#1100" id="1100">1100</a>
+<a href="#1101" id="1101">1101</a>
+<a href="#1102" id="1102">1102</a>
+<a href="#1103" id="1103">1103</a>
+<a href="#1104" id="1104">1104</a>
+<a href="#1105" id="1105">1105</a>
+<a href="#1106" id="1106">1106</a>
+<a href="#1107" id="1107">1107</a>
+<a href="#1108" id="1108">1108</a>
+<a href="#1109" id="1109">1109</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::aql::get_all_data_aql;
 <span class="kw">use </span><span class="kw">crate</span>::client::auth::handle_auth;
 <span class="kw">use </span><span class="kw">crate</span>::client::config::ClientConfig;
@@ -1081,7 +1114,9 @@
 <span class="kw">use </span><span class="kw">crate</span>::errors::GraphLoaderError;
 <span class="kw">use </span><span class="kw">crate</span>::request::handle_arangodb_response_with_parsed_body;
 <span class="kw">use </span><span class="kw">crate</span>::sharding::{compute_faked_shard_map, compute_shard_map};
-<span class="kw">use </span><span class="kw">crate</span>::types::info::{DeploymentType, LoadStrategy, SupportInfo, VersionInformation};
+<span class="kw">use </span><span class="kw">crate</span>::types::info::{
+    DeploymentInfo, DeploymentType, LoadStrategy, SupportInfo, VersionInformation,
+};
 <span class="kw">use crate</span>::{DataLoadConfiguration, DatabaseConfiguration};
 <span class="kw">use </span>bytes::Bytes;
 <span class="kw">use </span>log::{debug, error, info};
@@ -1284,12 +1319,43 @@
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
         client: <span class="kw-2">&amp;</span>ClientWithMiddleware,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
-        <span class="self">self</span>.support_info = <span class="prelude-val">Some</span>(<span class="self">self</span>.get_arangodb_support_information(client).<span class="kw">await</span><span class="question-mark">?</span>);
-        <span class="kw">let </span>(dump_support_enabled, dump_projections_support) = <span class="self">self
-            </span>.does_arangodb_supports_dump_endpoint(client, <span class="kw-2">&amp;</span><span class="self">self</span>.support_info)
-            .<span class="kw">await</span><span class="question-mark">?</span>;
-        <span class="self">self</span>.supports_projections = <span class="prelude-val">Some</span>(dump_projections_support);
-        <span class="self">self</span>.load_strategy = <span class="prelude-val">Some</span>(<span class="self">self</span>.identify_arangodb_load_strategy(dump_support_enabled));
+        <span class="self">self</span>.support_info = <span class="kw">match </span><span class="self">self</span>.get_arangodb_support_information(client).<span class="kw">await </span>{
+            <span class="prelude-val">Ok</span>(info) =&gt; <span class="prelude-val">Some</span>(info),
+            <span class="prelude-val">Err</span>(e) =&gt; {
+                <span class="macro">print!</span>(
+                    <span class="string">"Failed to read ArangoDB environment information: {}. \
+                    This can happen if the current user is not allowed to access the '/_admin/support-info' endpoint. \
+                    Assuming ArangoDB instance version is at least '3.12'. \
+                    We will use the aql load strategy as the loading strategy. \
+                    While this works, this will be slower then using the dump endpoint instead. "</span>, e
+                );
+                <span class="prelude-val">None
+            </span>}
+        };
+
+        <span class="kw">if </span><span class="self">self</span>.support_info.is_none() {
+            <span class="comment">// assume the environment is a cluster
+            </span><span class="self">self</span>.support_info = <span class="prelude-val">Some</span>(SupportInfo {
+                deployment: DeploymentInfo {
+                    deployment_type: DeploymentType::Single,
+                },
+            });
+
+            <span class="comment">// assume that dump endpoint is supported
+            </span><span class="self">self</span>.load_strategy = <span class="prelude-val">Some</span>(LoadStrategy::Aql);
+            <span class="comment">// assume projections are supported
+            </span><span class="self">self</span>.supports_projections = <span class="prelude-val">Some</span>(<span class="bool-val">true</span>);
+        } <span class="kw">else </span>{
+            <span class="kw">let </span>(dump_support_enabled, dump_projections_support) = <span class="self">self
+                </span>.does_arangodb_supports_dump_endpoint(client, <span class="kw-2">&amp;</span><span class="self">self</span>.support_info)
+                .<span class="kw">await</span><span class="question-mark">?</span>;
+            <span class="self">self</span>.supports_projections = <span class="prelude-val">Some</span>(dump_projections_support);
+            <span class="self">self</span>.load_strategy = <span class="prelude-val">Some</span>(<span class="self">self</span>.identify_arangodb_load_strategy(dump_support_enabled));
+        }
+
+        <span class="macro">debug_assert!</span>(<span class="self">self</span>.load_strategy.is_some());
+        <span class="macro">debug_assert!</span>(<span class="self">self</span>.supports_projections.is_some());
+
         <span class="prelude-val">Ok</span>(())
     }
 
