@@ -1,0 +1,9 @@
+0.0.8 (2024-08-22)
+-------------------
+
+* In case a user does not have permission to detect the ArangoDB environment
+  related information, like e.g. the shardDistribution, right now we cannot
+  detect which data loading strategy to choose from. In this case, we fallback
+  to the AQL variant as this always works. Still, if the fallback happens,
+  a warning message will be printed. Using the AQL variant will be slower
+  compared to the dump strategy variant.
