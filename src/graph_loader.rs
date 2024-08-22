@@ -5,7 +5,9 @@ use crate::client::{build_client, make_url};
 use crate::errors::GraphLoaderError;
 use crate::request::handle_arangodb_response_with_parsed_body;
 use crate::sharding::{compute_faked_shard_map, compute_shard_map};
-use crate::types::info::{DeploymentType, LoadStrategy, SupportInfo, VersionInformation};
+use crate::types::info::{
+    DeploymentInfo, DeploymentType, LoadStrategy, SupportInfo, VersionInformation,
+};
 use crate::{DataLoadConfiguration, DatabaseConfiguration};
 use bytes::Bytes;
 use log::{debug, error, info};
@@ -208,12 +210,43 @@ impl GraphLoader {
         &mut self,
         client: &ClientWithMiddleware,
     ) -> Result<(), String> {
-        self.support_info = Some(self.get_arangodb_support_information(client).await?);
-        let (dump_support_enabled, dump_projections_support) = self
-            .does_arangodb_supports_dump_endpoint(client, &self.support_info)
-            .await?;
-        self.supports_projections = Some(dump_projections_support);
-        self.load_strategy = Some(self.identify_arangodb_load_strategy(dump_support_enabled));
+        self.support_info = match self.get_arangodb_support_information(client).await {
+            Ok(info) => Some(info),
+            Err(e) => {
+                print!(
+                    "Failed to read ArangoDB environment information: {}. \
+                    This can happen if the current user is not allowed to access the '/_admin/support-info' endpoint. \
+                    Assuming ArangoDB instance version is at least '3.12'. \
+                    We will use the aql load strategy as the loading strategy. \
+                    While this works, this will be slower then using the dump endpoint instead. ", e
+                );
+                None
+            }
+        };
+
+        if self.support_info.is_none() {
+            // assume the environment is a cluster
+            self.support_info = Some(SupportInfo {
+                deployment: DeploymentInfo {
+                    deployment_type: DeploymentType::Single,
+                },
+            });
+
+            // assume that dump endpoint is supported
+            self.load_strategy = Some(LoadStrategy::Aql);
+            // assume projections are supported
+            self.supports_projections = Some(true);
+        } else {
+            let (dump_support_enabled, dump_projections_support) = self
+                .does_arangodb_supports_dump_endpoint(client, &self.support_info)
+                .await?;
+            self.supports_projections = Some(dump_projections_support);
+            self.load_strategy = Some(self.identify_arangodb_load_strategy(dump_support_enabled));
+        }
+
+        debug_assert!(self.load_strategy.is_some());
+        debug_assert!(self.supports_projections.is_some());
+
         Ok(())
     }
 
