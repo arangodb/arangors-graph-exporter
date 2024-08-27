@@ -24,7 +24,9 @@ pub fn build_client(
             let cert = get_cert(cert_path)?;
             client_builder.add_root_certificate(cert).use_rustls_tls()
         } else {
-            client_builder.danger_accept_invalid_certs(true).use_rustls_tls()
+            client_builder
+                .danger_accept_invalid_certs(true)
+                .use_rustls_tls()
         }
     } else {
         client_builder.danger_accept_invalid_certs(true)
