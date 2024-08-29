@@ -62,6 +62,8 @@
 <a href="#62" id="62">62</a>
 <a href="#63" id="63">63</a>
 <a href="#64" id="64">64</a>
+<a href="#65" id="65">65</a>
+<a href="#66" id="66">66</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::client::config::ClientConfig;
 <span class="kw">use </span><span class="kw">crate</span>::DatabaseConfiguration;
 <span class="kw">use </span>reqwest::{Certificate, Client};
@@ -88,7 +90,9 @@
             <span class="kw">let </span>cert = get_cert(cert_path)<span class="question-mark">?</span>;
             client_builder.add_root_certificate(cert).use_rustls_tls()
         } <span class="kw">else </span>{
-            client_builder.danger_accept_invalid_certs(<span class="bool-val">true</span>)
+            client_builder
+                .danger_accept_invalid_certs(<span class="bool-val">true</span>)
+                .use_rustls_tls()
         }
     } <span class="kw">else </span>{
         client_builder.danger_accept_invalid_certs(<span class="bool-val">true</span>)
