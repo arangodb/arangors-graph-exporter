@@ -1,3 +1,3 @@
 (function() {var implementors = {
-"arangors_graph_exporter":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.80.1/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"enum\" href=\"arangors_graph_exporter/errors/enum.GraphLoaderError.html\" title=\"enum arangors_graph_exporter::errors::GraphLoaderError\">GraphLoaderError</a>"]]
+"arangors_graph_exporter":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.81.0/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"enum\" href=\"arangors_graph_exporter/errors/enum.GraphLoaderError.html\" title=\"enum arangors_graph_exporter::errors::GraphLoaderError\">GraphLoaderError</a>"]]
 };if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
