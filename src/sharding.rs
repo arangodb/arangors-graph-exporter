@@ -273,22 +273,31 @@ pub(crate) async fn get_all_shard_data(
                         .bytes()
                         .await
                         .map_err(|e| format!("Error in body: {:?}", e))?;
-                    result_channel_clone
-                        .send(body)
-                        .await
-                        .expect("Could not send to channel!");
+                    match result_channel_clone.send(body).await {
+                        Ok(_) => {
+                            // Successfully sent to the channel
+                            debug!("Successfully sent message to channel.");
+                        }
+                        Err(e) => {
+                            panic!("Failed to send to channel: {:?}", e);
+                        }
+                    }
                 }
             });
         }
     }
     while let Some(res) = task_set.join_next().await {
-        let r = res.unwrap();
-        match r {
-            Ok(_x) => {
+        match res {
+            Ok(Ok(_x)) => {
                 debug!("Got OK result!");
             }
-            Err(msg) => {
-                debug!("Got error result: {}", msg);
+            Ok(Err(err_msg)) => {
+                // This handles errors that occur within the task itself
+                panic!("Task failed with error: {:?}", err_msg);
+            }
+            Err(join_err) => {
+                // This handles errors in the task joining process (e.g., task panicked)
+                panic!("Task join error occurred: {:?}", join_err)
             }
         }
     }
