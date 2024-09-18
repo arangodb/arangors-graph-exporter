@@ -6,7 +6,7 @@ use crate::request::handle_arangodb_response;
 use crate::types::info::DeploymentType;
 use crate::{errors, DataLoadConfiguration, DatabaseConfiguration};
 use bytes::Bytes;
-use log::{debug, error, info};
+use log::{debug, error};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
