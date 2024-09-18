@@ -354,6 +354,15 @@
 <a href="#354" id="354">354</a>
 <a href="#355" id="355">355</a>
 <a href="#356" id="356">356</a>
+<a href="#357" id="357">357</a>
+<a href="#358" id="358">358</a>
+<a href="#359" id="359">359</a>
+<a href="#360" id="360">360</a>
+<a href="#361" id="361">361</a>
+<a href="#362" id="362">362</a>
+<a href="#363" id="363">363</a>
+<a href="#364" id="364">364</a>
+<a href="#365" id="365">365</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::client::auth::handle_auth;
 <span class="kw">use </span><span class="kw">crate</span>::client::config::ClientConfig;
 <span class="kw">use </span><span class="kw">crate</span>::client::{build_client, make_url};
@@ -629,22 +638,31 @@
                         .bytes()
                         .<span class="kw">await
                         </span>.map_err(|e| <span class="macro">format!</span>(<span class="string">"Error in body: {:?}"</span>, e))<span class="question-mark">?</span>;
-                    result_channel_clone
-                        .send(body)
-                        .<span class="kw">await
-                        </span>.expect(<span class="string">"Could not send to channel!"</span>);
+                    <span class="kw">match </span>result_channel_clone.send(body).<span class="kw">await </span>{
+                        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {
+                            <span class="comment">// Successfully sent to the channel
+                            </span><span class="macro">debug!</span>(<span class="string">"Successfully sent message to channel."</span>);
+                        }
+                        <span class="prelude-val">Err</span>(e) =&gt; {
+                            <span class="macro">panic!</span>(<span class="string">"Failed to send to channel: {:?}"</span>, e);
+                        }
+                    }
                 }
             });
         }
     }
     <span class="kw">while let </span><span class="prelude-val">Some</span>(res) = task_set.join_next().<span class="kw">await </span>{
-        <span class="kw">let </span>r = res.unwrap();
-        <span class="kw">match </span>r {
-            <span class="prelude-val">Ok</span>(_x) =&gt; {
+        <span class="kw">match </span>res {
+            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(_x)) =&gt; {
                 <span class="macro">debug!</span>(<span class="string">"Got OK result!"</span>);
             }
-            <span class="prelude-val">Err</span>(msg) =&gt; {
-                <span class="macro">debug!</span>(<span class="string">"Got error result: {}"</span>, msg);
+            <span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(err_msg)) =&gt; {
+                <span class="comment">// This handles errors that occur within the task itself
+                </span><span class="macro">panic!</span>(<span class="string">"Task failed with error: {:?}"</span>, err_msg);
+            }
+            <span class="prelude-val">Err</span>(join_err) =&gt; {
+                <span class="comment">// This handles errors in the task joining process (e.g., task panicked)
+                </span><span class="macro">panic!</span>(<span class="string">"Task join error occurred: {:?}"</span>, join_err)
             }
         }
     }
