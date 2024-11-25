@@ -746,6 +746,69 @@ async fn init_custom_graph_loader_with_fields_and_fetch_all_attributes_positive(
 
 #[tokio::test]
 #[serial]
+async fn init_graph_loader_with_single_vertex_no_edges() {
+    // Setup the graph with a single vertex and no edges
+    let conn = Connection::establish_basic_auth(DATABASE_URL, USERNAME, PASSWORD)
+        .await
+        .unwrap();
+    let db = conn.db(DATABASE).await.unwrap();
+
+    let edge_definition = EdgeDefinition {
+        collection: EDGE_COLLECTION.to_string(),
+        from: vec![VERTEX_COLLECTION.to_string()],
+        to: vec![VERTEX_COLLECTION.to_string()],
+    };
+    let graph = Graph::builder()
+        .name(GRAPH.to_string())
+        .edge_definitions(vec![edge_definition])
+        .orphan_collections(vec![])
+        .build();
+
+    let _ = db.drop_graph(GRAPH, true).await;
+    let graph_res = db.create_graph(graph, false).await;
+    assert!(graph_res.is_ok());
+
+    let vertex_collection = db.collection(VERTEX_COLLECTION).await.unwrap();
+    let insert_options = InsertOptions::builder().overwrite(true).build();
+    vertex_collection
+        .create_document(serde_json::json!({"_key": "0"}), insert_options.clone())
+        .await
+        .unwrap();
+
+    let properties_v = vertex_collection.document_count().await.unwrap();
+    assert_eq!(properties_v.info.count, Some(1));
+
+    // Initialize GraphLoader with load_all_vertex_attributes set to False
+    let db_config = build_db_config();
+    let load_config = build_load_config_with_v_with_e(false, false);
+
+    let graph_loader_res =
+        GraphLoader::new_named(db_config, load_config, GRAPH.to_string(), None, None).await;
+    if let Err(ref e) = graph_loader_res {
+        println!("{:?}", e);
+    }
+    assert!(graph_loader_res.is_ok());
+
+    // Check that the single vertex is loaded with no attributes
+    let graph_loader = graph_loader_res.unwrap();
+    let handle_vertices = move |vertex_ids: &Vec<Vec<u8>>,
+                                columns: &mut Vec<Vec<Value>>,
+                                vertex_field_names: &Vec<String>| {
+        assert_eq!(vertex_ids.len(), 1);
+        assert_eq!(columns.len(), 1);
+        assert_eq!(columns[0].len(), 0);
+        assert_eq!(vertex_field_names.len(), 0);
+        Ok(())
+    };
+    let vertices_result = graph_loader.do_vertices(handle_vertices).await;
+    assert!(vertices_result.is_ok());
+
+    // Teardown the graph
+    let _ = db.drop_graph(GRAPH, true).await;
+}
+
+#[tokio::test]
+#[serial]
 async fn init_custom_graph_loader_with_fields_and_fetch_all_attributes_negative() {
     setup(false).await;
     let test_variants: Vec<(bool, bool)> = generate_collection_load_combinations();
