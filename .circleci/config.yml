@@ -25,7 +25,7 @@ workflows:
 jobs:
   build:
     docker:
-      - image: cimg/rust:1.75
+      - image: cimg/rust:1.82
     steps:
       - run:
           name: Checkout code
@@ -38,7 +38,7 @@ jobs:
 
   lint-rust:
     docker:
-      - image: cimg/rust:1.75
+      - image: cimg/rust:1.82
     steps:
       - run:
           name: Checkout code
