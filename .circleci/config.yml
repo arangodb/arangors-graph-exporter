@@ -27,7 +27,8 @@ jobs:
     docker:
       - image: cimg/rust:1.75
     steps:
-      - checkout
+      - checkout:
+          path: ~/project
       - run:
           name: Compile arangors-graph-exporter
           command: cargo build --release
@@ -36,7 +37,8 @@ jobs:
     docker:
       - image: cimg/rust:1.75
     steps:
-      - checkout
+      - checkout:
+          path: ~/project
       - run:
           name: Install clippy
           command: rustup component add clippy
@@ -57,7 +59,8 @@ jobs:
         type: string
     executor: generate-executor
     steps:
-      - checkout
+      - checkout:
+          path: ~/project
       - run:
           name: Install Rust
           command: |
