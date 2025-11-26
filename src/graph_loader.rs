@@ -521,11 +521,11 @@ impl GraphLoader {
 
                             for mut vertex in values.result.into_iter() {
                                 // For combined queries, filter out edges (documents with _from and _to)
-                                if is_combined {
-                                    if vertex.get("_from").is_some() && vertex.get("_to").is_some()
-                                    {
-                                        continue; // Skip edge documents
-                                    }
+                                if is_combined
+                                    && vertex.get("_from").is_some()
+                                    && vertex.get("_to").is_some()
+                                {
+                                    continue; // Skip edge documents
                                 }
 
                                 let id = &vertex["_id"];
@@ -898,10 +898,10 @@ impl GraphLoader {
 
                         for mut edge in values.result.into_iter() {
                             // For combined queries, filter to only edges (documents with _from and _to)
-                            if is_combined {
-                                if edge.get("_from").is_none() || edge.get("_to").is_none() {
-                                    continue; // Skip non-edge documents (vertices)
-                                }
+                            if is_combined
+                                && (edge.get("_from").is_none() || edge.get("_to").is_none())
+                            {
+                                continue; // Skip non-edge documents (vertices)
                             }
 
                             let from = &edge["_from"];

@@ -214,7 +214,7 @@ async fn init_named_graph_loader_with_data() {
         assert_eq!(vertex_ids.len(), 10);
 
         assert_eq!(columns.len(), 10);
-        for (_v_index, vertex) in columns.iter().enumerate() {
+        for vertex in columns.iter() {
             assert_eq!(vertex.len(), 0);
             assert_eq!(vertex.len(), vertex_field_names.len());
         }
@@ -255,7 +255,7 @@ async fn init_named_graph_loader_with_data() {
     teardown().await;
 }
 
-fn get_attribute_position_from_fields(field_names: &Vec<String>, attribute: &str) -> usize {
+fn get_attribute_position_from_fields(field_names: &[String], attribute: &str) -> usize {
     assert!(!field_names.is_empty());
     assert!(field_names.contains(&attribute.to_string()));
     field_names.iter().position(|x| x == attribute).unwrap()
@@ -426,7 +426,7 @@ async fn init_named_graph_loader_with_data_all_v_and_e_collection_name_attribute
             assert_eq!(id, expected_id);
         }
 
-        for (_v_index, vertex) in columns.iter().enumerate() {
+        for vertex in columns.iter() {
             assert_eq!(vertex.len(), 1);
             assert_eq!(vertex.len(), vertex_field_names.len());
 
@@ -473,7 +473,7 @@ async fn init_named_graph_loader_with_data_all_v_and_e_collection_name_attribute
             assert_eq!(to_id_str, format!("{}/{}", VERTEX_COLLECTION, e_index + 1));
         }
 
-        for (_e_index, edge) in columns.iter().enumerate() {
+        for edge in columns.iter() {
             assert_eq!(edge.len(), 1);
             assert_eq!(edge_field_names.len(), 1);
 
@@ -821,22 +821,20 @@ async fn init_empty_custom_graph_loader() {
                 Err(GraphLoaderError::Other(ref msg))
                     if msg.contains("No vertex collections given!") =>
                 {
-                    assert!(true)
+                    // Expected error
                 }
-                _ => assert!(false),
+                _ => panic!("Expected error about no vertex collections"),
             }
         }
+    } else if major > 3 || (major == 3 && minor >= 12) {
+        // single server dump endpoint only supported from 3.12
+        // all versions below will fall back to aql.
+        // uses dump endpoint, must fail
+        assert!(vertices_result.is_err());
     } else {
-        if major > 3 || (major == 3 && minor >= 12) {
-            // single server dump endpoint only supported from 3.12
-            // all versions below will fall back to aql.
-            // uses dump endpoint, must fail
-            assert!(vertices_result.is_err());
-        } else {
-            // In the SingleServer case we do not have an error as we execute AQL on empty collections.
-            // Means we're just not receiving any documents.
-            assert!(vertices_result.is_ok());
-        }
+        // In the SingleServer case we do not have an error as we execute AQL on empty collections.
+        // Means we're just not receiving any documents.
+        assert!(vertices_result.is_ok());
     }
 
     let handle_edges = move |_from_ids: &Vec<Vec<u8>>,
@@ -852,20 +850,18 @@ async fn init_empty_custom_graph_loader() {
                 Err(GraphLoaderError::Other(ref msg))
                     if msg.contains("No edge collections given!") =>
                 {
-                    assert!(true)
+                    // Expected error
                 }
-                _ => assert!(false),
+                _ => panic!("Expected error about no edge collections"),
             }
         }
+    } else if major > 3 || (major == 3 && minor >= 12) {
+        // uses dump endpoint, must fail
+        assert!(vertices_result.is_err());
     } else {
-        if major > 3 || (major == 3 && minor >= 12) {
-            // uses dump endpoint, must fail
-            assert!(vertices_result.is_err());
-        } else {
-            // In the SingleServer case we do not have an error as we execute AQL on empty collections.
-            // Means we're just not receiving any documents.
-            assert!(vertices_result.is_ok());
-        }
+        // In the SingleServer case we do not have an error as we execute AQL on empty collections.
+        // Means we're just not receiving any documents.
+        assert!(vertices_result.is_ok());
     }
     if let Err(ref e) = edges_result {
         println!("{:?}", e);
