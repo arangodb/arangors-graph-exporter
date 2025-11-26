@@ -74,8 +74,9 @@ jobs:
       - run:
           name: Install Rust
           command: |
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.82
             source $HOME/.cargo/env
+            rustc --version
       - run:
           name: Set Docker Image
           command: |
