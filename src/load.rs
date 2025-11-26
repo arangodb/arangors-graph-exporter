@@ -36,29 +36,50 @@ pub async fn load_custom_graph(
 ///
 /// # Example - Separate queries:
 /// ```rust,no_run
-/// use arangors_graph_exporter::{CustomAqlQueries, DatabaseConfiguration, DataLoadConfiguration, load_with_custom_aql};
-///
-/// let queries = CustomAqlQueries::new_separate(
-///     "FOR v IN vertices FILTER v.age > 18 RETURN v".to_string(),
-///     "FOR e IN edges FILTER e.weight > 0.5 RETURN e".to_string(),
-///     None,
-/// );
-/// let loader = load_with_custom_aql(db_config, load_config, queries).await?;
+/// use arangors_graph_exporter::{CustomAqlQueries, DatabaseConfigurationBuilder, DataLoadConfigurationBuilder, load_with_custom_aql};
+/// 
+/// async fn example() -> Result<(), Box<dyn std::error::Error>> {
+///     let db_config = DatabaseConfigurationBuilder::new()
+///         .endpoints(vec!["http://localhost:8529".to_string()])
+///         .username("root".to_string())
+///         .password("test".to_string())
+///         .database("_system".to_string())
+///         .build();
+///     let load_config = DataLoadConfigurationBuilder::new().build();
+///     
+///     let queries = CustomAqlQueries::new_separate(
+///         "FOR v IN vertices FILTER v.age > 18 RETURN v".to_string(),
+///         "FOR e IN edges FILTER e.weight > 0.5 RETURN e".to_string(),
+///         None,
+///     );
+///     let loader = load_with_custom_aql(db_config, load_config, queries).await?;
+///     Ok(())
+/// }
 /// ```
-///
+/// 
 /// # Example - Combined query:
 /// ```rust,no_run
-/// use arangors_graph_exporter::{CustomAqlQueries, DatabaseConfiguration, DataLoadConfiguration, load_with_custom_aql};
-///
-/// let query = r#"
-///     FOR doc IN vertices
-///         RETURN MERGE(doc, {_type: "vertex"})
-///     UNION
-///     FOR doc IN edges
-///         RETURN MERGE(doc, {_type: "edge"})
-/// "#.to_string();
-/// let queries = CustomAqlQueries::new_combined(query, None);
-/// let loader = load_with_custom_aql(db_config, load_config, queries).await?;
+/// use arangors_graph_exporter::{CustomAqlQueries, DatabaseConfigurationBuilder, DataLoadConfigurationBuilder, load_with_custom_aql};
+/// 
+/// async fn example() -> Result<(), Box<dyn std::error::Error>> {
+///     let db_config = DatabaseConfigurationBuilder::new()
+///         .endpoints(vec!["http://localhost:8529".to_string()])
+///         .username("root".to_string())
+///         .password("test".to_string())
+///         .database("_system".to_string())
+///         .build();
+///     let load_config = DataLoadConfigurationBuilder::new().build();
+///     
+///     let query = r#"
+///         LET vertices = (FOR v IN vertices RETURN MERGE(v, {_type: "vertex"}))
+///         LET edges = (FOR e IN edges RETURN MERGE(e, {_type: "edge"}))
+///         FOR doc IN APPEND(vertices, edges)
+///         RETURN doc
+///     "#.to_string();
+///     let queries = CustomAqlQueries::new_combined(query, None);
+///     let loader = load_with_custom_aql(db_config, load_config, queries).await?;
+///     Ok(())
+/// }
 /// ```
 pub async fn load_with_custom_aql(
     db_config: DatabaseConfiguration,
