@@ -185,8 +185,9 @@ impl DataLoadConfigurationBuilder {
 /// 1. Separate vertex and edge queries (Option A)
 /// 2. Combined query that returns both vertices and edges (Option B)
 ///
-/// For combined queries, the result must include a `_type` field indicating
-/// whether the document is a vertex or edge: `"vertex"` or `"edge"`.
+/// For combined queries, edges are automatically detected by the presence of
+/// `_from` and `_to` attributes. Documents without these attributes are treated
+/// as vertices. Both vertices and edges must have `_id` and `_key` fields.
 #[derive(Clone, Debug)]
 pub struct CustomAqlQueries {
     /// Optional: Custom AQL query for vertices
@@ -196,8 +197,9 @@ pub struct CustomAqlQueries {
     /// Query must return documents with `_from` and `_to` fields for edges
     pub edge_query: Option<String>,
     /// Optional: Combined query that returns both vertices and edges
-    /// Results must include a `_type` field: "vertex" or "edge"
-    /// Vertices must have `_id`, edges must have `_from` and `_to`
+    /// Edges are auto-detected by the presence of `_from` and `_to` fields.
+    /// Documents without `_from` and `_to` are treated as vertices.
+    /// Both vertices and edges must have `_id` and `_key` fields.
     pub combined_query: Option<String>,
     /// Optional bind variables for the queries (shared across all queries if provided)
     pub bind_vars: Option<std::collections::HashMap<String, serde_json::Value>>,
@@ -271,10 +273,8 @@ mod tests {
 
     #[test]
     fn test_custom_aql_queries_new_combined() {
-        let queries = CustomAqlQueries::new_combined(
-            "FOR doc IN vertices RETURN MERGE(doc, {_type: 'vertex'})".to_string(),
-            None,
-        );
+        let queries =
+            CustomAqlQueries::new_combined("FOR doc IN vertices RETURN doc".to_string(), None);
 
         assert!(queries.vertex_query.is_none());
         assert!(queries.edge_query.is_none());
@@ -294,10 +294,8 @@ mod tests {
 
     #[test]
     fn test_custom_aql_queries_validate_combined_success() {
-        let queries = CustomAqlQueries::new_combined(
-            "FOR doc IN vertices RETURN MERGE(doc, {_type: 'vertex'})".to_string(),
-            None,
-        );
+        let queries =
+            CustomAqlQueries::new_combined("FOR doc IN vertices RETURN doc".to_string(), None);
         assert!(queries.validate().is_ok());
     }
 

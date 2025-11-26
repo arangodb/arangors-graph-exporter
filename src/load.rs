@@ -71,8 +71,8 @@ pub async fn load_custom_graph(
 ///     let load_config = DataLoadConfigurationBuilder::new().build();
 ///     
 ///     let query = r#"
-///         LET vertices = (FOR v IN vertices RETURN MERGE(v, {_type: "vertex"}))
-///         LET edges = (FOR e IN edges RETURN MERGE(e, {_type: "edge"}))
+///         LET vertices = (FOR v IN vertices RETURN v)
+///         LET edges = (FOR e IN edges RETURN e)
 ///         FOR doc IN APPEND(vertices, edges)
 ///         RETURN doc
 ///     "#.to_string();

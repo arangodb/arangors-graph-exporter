@@ -520,14 +520,12 @@ impl GraphLoader {
                             };
 
                             for mut vertex in values.result.into_iter() {
-                                // For combined queries, filter by _type field
+                                // For combined queries, filter out edges (documents with _from and _to)
                                 if is_combined {
-                                    let doc_type = vertex.get("_type").and_then(|v| v.as_str());
-                                    if doc_type != Some("vertex") {
-                                        continue; // Skip non-vertex documents
+                                    if vertex.get("_from").is_some() && vertex.get("_to").is_some()
+                                    {
+                                        continue; // Skip edge documents
                                     }
-                                    // Remove _type field as it's not part of the vertex data
-                                    vertex.as_object_mut().and_then(|o| o.remove("_type"));
                                 }
 
                                 let id = &vertex["_id"];
@@ -899,14 +897,11 @@ impl GraphLoader {
                         };
 
                         for mut edge in values.result.into_iter() {
-                            // For combined queries, filter by _type field
+                            // For combined queries, filter to only edges (documents with _from and _to)
                             if is_combined {
-                                let doc_type = edge.get("_type").and_then(|v| v.as_str());
-                                if doc_type != Some("edge") {
-                                    continue; // Skip non-edge documents
+                                if edge.get("_from").is_none() || edge.get("_to").is_none() {
+                                    continue; // Skip non-edge documents (vertices)
                                 }
-                                // Remove _type field as it's not part of the edge data
-                                edge.as_object_mut().and_then(|o| o.remove("_type"));
                             }
 
                             let from = &edge["_from"];

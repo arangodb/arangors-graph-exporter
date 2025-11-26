@@ -1000,11 +1000,11 @@ async fn test_custom_aql_combined_query() {
     let db_config = build_db_config();
     let load_config = build_load_config();
 
-    // Combined query that returns both vertices and edges with _type field
-    // Using LET and FLATTEN to combine results from both collections
+    // Combined query that returns both vertices and edges
+    // Edges are auto-detected by _from and _to fields
     let combined_query = format!(
-        r#"LET vertices = (FOR v IN {} RETURN MERGE(v, {{_type: "vertex"}}))
-        LET edges = (FOR e IN {} RETURN MERGE(e, {{_type: "edge"}}))
+        r#"LET vertices = (FOR v IN {} RETURN v)
+        LET edges = (FOR e IN {} RETURN e)
         FOR doc IN APPEND(vertices, edges)
         RETURN doc"#,
         VERTEX_COLLECTION, EDGE_COLLECTION
