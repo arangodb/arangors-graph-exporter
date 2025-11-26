@@ -37,7 +37,7 @@ pub async fn load_custom_graph(
 /// # Example - Separate queries:
 /// ```rust,no_run
 /// use arangors_graph_exporter::{CustomAqlQueries, DatabaseConfigurationBuilder, DataLoadConfigurationBuilder, load_with_custom_aql};
-/// 
+///
 /// async fn example() -> Result<(), Box<dyn std::error::Error>> {
 ///     let db_config = DatabaseConfigurationBuilder::new()
 ///         .endpoints(vec!["http://localhost:8529".to_string()])
@@ -56,11 +56,11 @@ pub async fn load_custom_graph(
 ///     Ok(())
 /// }
 /// ```
-/// 
+///
 /// # Example - Combined query:
 /// ```rust,no_run
 /// use arangors_graph_exporter::{CustomAqlQueries, DatabaseConfigurationBuilder, DataLoadConfigurationBuilder, load_with_custom_aql};
-/// 
+///
 /// async fn example() -> Result<(), Box<dyn std::error::Error>> {
 ///     let db_config = DatabaseConfigurationBuilder::new()
 ///         .endpoints(vec!["http://localhost:8529".to_string()])
