@@ -9,8 +9,8 @@ mod sharding;
 pub mod types;
 
 pub use config::{
-    CustomAqlQueries, DataLoadConfiguration, DataLoadConfigurationBuilder,
-    DatabaseConfiguration, DatabaseConfigurationBuilder,
+    CustomAqlQueries, DataLoadConfiguration, DataLoadConfigurationBuilder, DatabaseConfiguration,
+    DatabaseConfigurationBuilder,
 };
 pub use graph_loader::{CollectionInfo, GraphLoader};
 pub use load::{load_custom_graph, load_named_graph, load_with_custom_aql};

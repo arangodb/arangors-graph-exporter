@@ -180,11 +180,11 @@ impl DataLoadConfigurationBuilder {
 }
 
 /// Configuration for custom AQL queries
-/// 
+///
 /// Supports three modes:
 /// 1. Separate vertex and edge queries (Option A)
 /// 2. Combined query that returns both vertices and edges (Option B)
-/// 
+///
 /// For combined queries, the result must include a `_type` field indicating
 /// whether the document is a vertex or edge: `"vertex"` or `"edge"`.
 #[derive(Clone, Debug)]
@@ -235,15 +235,17 @@ impl CustomAqlQueries {
     pub fn validate(&self) -> Result<(), String> {
         let has_separate = self.vertex_query.is_some() && self.edge_query.is_some();
         let has_combined = self.combined_query.is_some();
-        
+
         if !has_separate && !has_combined {
             return Err("Either separate queries (vertex_query + edge_query) or combined_query must be provided".to_string());
         }
-        
+
         if has_separate && has_combined {
-            return Err("Cannot use both separate queries and combined query at the same time".to_string());
+            return Err(
+                "Cannot use both separate queries and combined query at the same time".to_string(),
+            );
         }
-        
+
         Ok(())
     }
 }
@@ -260,7 +262,7 @@ mod tests {
             "FOR e IN edges RETURN e".to_string(),
             None,
         );
-        
+
         assert!(queries.vertex_query.is_some());
         assert!(queries.edge_query.is_some());
         assert!(queries.combined_query.is_none());
@@ -273,7 +275,7 @@ mod tests {
             "FOR doc IN vertices RETURN MERGE(doc, {_type: 'vertex'})".to_string(),
             None,
         );
-        
+
         assert!(queries.vertex_query.is_none());
         assert!(queries.edge_query.is_none());
         assert!(queries.combined_query.is_some());
@@ -340,14 +342,17 @@ mod tests {
     fn test_custom_aql_queries_with_bind_vars() {
         let mut bind_vars = HashMap::new();
         bind_vars.insert("min_age".to_string(), serde_json::Value::Number(18.into()));
-        bind_vars.insert("collection".to_string(), serde_json::Value::String("users".to_string()));
-        
+        bind_vars.insert(
+            "collection".to_string(),
+            serde_json::Value::String("users".to_string()),
+        );
+
         let queries = CustomAqlQueries::new_separate(
             "FOR v IN @@collection FILTER v.age >= @min_age RETURN v".to_string(),
             "FOR e IN edges RETURN e".to_string(),
             Some(bind_vars.clone()),
         );
-        
+
         assert!(queries.bind_vars.is_some());
         assert_eq!(queries.bind_vars.as_ref().unwrap().len(), 2);
         assert!(queries.validate().is_ok());

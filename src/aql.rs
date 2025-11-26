@@ -93,7 +93,10 @@ pub async fn get_all_data_aql(
     for col in collections.iter() {
         let query = build_aql_query(col, is_edge, load_all_attributes);
         let mut bind_vars: HashMap<String, serde_json::Value> = HashMap::new();
-        bind_vars.insert("@col".to_string(), serde_json::Value::String(col.name.clone()));
+        bind_vars.insert(
+            "@col".to_string(),
+            serde_json::Value::String(col.name.clone()),
+        );
         let body = CreateCursorBody::from_streaming_query_with_size(query, None, Some(bind_vars));
         let body_v = serde_json::to_vec::<CreateCursorBody>(&body)
             .expect("could not serialize DumpStartBody");
@@ -359,7 +362,7 @@ pub async fn execute_custom_aql_query(
                 .send(bytes_res)
                 .await
                 .expect("Could not send to channel");
-            
+
             if let Some(id) = id {
                 if cursor_resp.has_more.unwrap_or(false) {
                     cursor_ids.push(id.clone());
@@ -383,12 +386,14 @@ pub async fn execute_custom_aql_query(
                                 start.duration_since(begin).unwrap(),
                                 id,
                             );
-                            let resp = handle_auth(client_clone.post(url), &connection_config_clone)
-                                .send()
-                                .await;
                             let resp =
-                                crate::request::handle_arangodb_response(resp, |c| c == StatusCode::OK)
-                                    .await?;
+                                handle_auth(client_clone.post(url), &connection_config_clone)
+                                    .send()
+                                    .await;
+                            let resp = crate::request::handle_arangodb_response(resp, |c| {
+                                c == StatusCode::OK
+                            })
+                            .await?;
                             let end = SystemTime::now();
                             let dur = end.duration_since(start).unwrap();
                             let bytes_res = resp

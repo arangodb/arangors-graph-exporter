@@ -30,14 +30,14 @@ pub async fn load_custom_graph(
 }
 
 /// Load a graph using custom AQL queries
-/// 
+///
 /// This allows you to provide custom AQL queries with filtering capabilities.
 /// You can either provide separate vertex and edge queries, or a combined query.
-/// 
+///
 /// # Example - Separate queries:
 /// ```rust,no_run
 /// use arangors_graph_exporter::{CustomAqlQueries, DatabaseConfiguration, DataLoadConfiguration, load_with_custom_aql};
-/// 
+///
 /// let queries = CustomAqlQueries::new_separate(
 ///     "FOR v IN vertices FILTER v.age > 18 RETURN v".to_string(),
 ///     "FOR e IN edges FILTER e.weight > 0.5 RETURN e".to_string(),
@@ -45,11 +45,11 @@ pub async fn load_custom_graph(
 /// );
 /// let loader = load_with_custom_aql(db_config, load_config, queries).await?;
 /// ```
-/// 
+///
 /// # Example - Combined query:
 /// ```rust,no_run
 /// use arangors_graph_exporter::{CustomAqlQueries, DatabaseConfiguration, DataLoadConfiguration, load_with_custom_aql};
-/// 
+///
 /// let query = r#"
 ///     FOR doc IN vertices
 ///         RETURN MERGE(doc, {_type: "vertex"})

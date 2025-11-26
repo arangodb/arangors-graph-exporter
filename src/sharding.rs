@@ -190,8 +190,7 @@ pub(crate) async fn get_all_shard_data(
         return Err(GraphLoaderError::NoDatabaseServers);
     }
 
-    let par_per_dbserver =
-        (load_config.parallelism as usize + dbservers.len() - 1) / dbservers.len();
+    let par_per_dbserver = (load_config.parallelism as usize).div_ceil(dbservers.len());
     let mut task_set = JoinSet::new();
     let mut endpoints_round_robin: usize = 0;
     let mut consumers_round_robin: usize = 0;

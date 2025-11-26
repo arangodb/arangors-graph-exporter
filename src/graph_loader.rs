@@ -377,7 +377,7 @@ impl GraphLoader {
     }
 
     /// Create a GraphLoader with custom AQL queries
-    /// 
+    ///
     /// This allows you to provide custom AQL queries with filtering capabilities.
     /// You can either provide separate vertex and edge queries, or a combined query.
     pub async fn new_with_custom_aql(
@@ -385,7 +385,7 @@ impl GraphLoader {
         load_config: DataLoadConfiguration,
         custom_queries: CustomAqlQueries,
     ) -> Result<Self, GraphLoaderError> {
-        custom_queries.validate().map_err(|e| GraphLoaderError::from(e))?;
+        custom_queries.validate().map_err(GraphLoaderError::from)?;
 
         let graph_loader = GraphLoader {
             db_config,
@@ -470,7 +470,7 @@ impl GraphLoader {
                                 let idstr: &String = match id {
                                     Value::String(i) => {
                                         let mut buf = vec![];
-                                        buf.extend_from_slice(i[..].as_bytes());
+                                        buf.extend_from_slice(i.as_bytes());
                                         vertex_ids.push(buf);
                                         i
                                     }
@@ -534,7 +534,7 @@ impl GraphLoader {
                                 let idstr: &String = match id {
                                     Value::String(i) => {
                                         let mut buf = vec![];
-                                        buf.extend_from_slice(i[..].as_bytes());
+                                        buf.extend_from_slice(i.as_bytes());
                                         vertex_ids.push(buf);
                                         i
                                     }
@@ -584,7 +584,7 @@ impl GraphLoader {
                                 let idstr: &String = match id {
                                     Value::String(i) => {
                                         let mut buf = vec![];
-                                        buf.extend_from_slice(i[..].as_bytes());
+                                        buf.extend_from_slice(i.as_bytes());
                                         vertex_ids.push(buf);
                                         i
                                     }
@@ -823,7 +823,7 @@ impl GraphLoader {
                             match from {
                                 Value::String(i) => {
                                     let mut buf = vec![];
-                                    buf.extend_from_slice(i[..].as_bytes());
+                                    buf.extend_from_slice(i.as_bytes());
                                     froms.push(buf);
                                 }
                                 _ => {
@@ -838,7 +838,7 @@ impl GraphLoader {
                             match to {
                                 Value::String(i) => {
                                     let mut buf = vec![];
-                                    buf.extend_from_slice(i[..].as_bytes());
+                                    buf.extend_from_slice(i.as_bytes());
                                     tos.push(buf);
                                 }
                                 _ => {
@@ -913,7 +913,7 @@ impl GraphLoader {
                             match from {
                                 Value::String(i) => {
                                     let mut buf = vec![];
-                                    buf.extend_from_slice(i[..].as_bytes());
+                                    buf.extend_from_slice(i.as_bytes());
                                     froms.push(buf);
                                 }
                                 _ => {
@@ -928,7 +928,7 @@ impl GraphLoader {
                             match to {
                                 Value::String(i) => {
                                     let mut buf = vec![];
-                                    buf.extend_from_slice(i[..].as_bytes());
+                                    buf.extend_from_slice(i.as_bytes());
                                     tos.push(buf);
                                 }
                                 _ => {
@@ -989,7 +989,7 @@ impl GraphLoader {
                             match from {
                                 Value::String(i) => {
                                     let mut buf = vec![];
-                                    buf.extend_from_slice(i[..].as_bytes());
+                                    buf.extend_from_slice(i.as_bytes());
                                     froms.push(buf);
                                 }
                                 _ => {
@@ -1004,7 +1004,7 @@ impl GraphLoader {
                             match to {
                                 Value::String(i) => {
                                     let mut buf = vec![];
-                                    buf.extend_from_slice(i[..].as_bytes());
+                                    buf.extend_from_slice(i.as_bytes());
                                     tos.push(buf);
                                 }
                                 _ => {
