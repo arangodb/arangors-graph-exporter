@@ -1,4 +1,4 @@
-use crate::aql::get_all_data_aql;
+use crate::aql::{execute_custom_aql_query, get_all_data_aql};
 use crate::client::auth::handle_auth;
 use crate::client::config::ClientConfig;
 use crate::client::{build_client, make_url};
@@ -8,7 +8,7 @@ use crate::sharding::{compute_faked_shard_map, compute_shard_map};
 use crate::types::info::{
     DeploymentInfo, DeploymentType, LoadStrategy, SupportInfo, VersionInformation,
 };
-use crate::{DataLoadConfiguration, DatabaseConfiguration};
+use crate::{CustomAqlQueries, DataLoadConfiguration, DatabaseConfiguration};
 use bytes::Bytes;
 use log::{debug, error, info};
 use reqwest::StatusCode;
@@ -46,6 +46,7 @@ pub struct GraphLoader {
     load_strategy: Option<LoadStrategy>,
     support_info: Option<SupportInfo>,
     supports_projections: Option<bool>,
+    custom_aql_queries: Option<CustomAqlQueries>,
 }
 
 fn collection_name_from_id(id: &str) -> String {
@@ -91,6 +92,7 @@ impl GraphLoader {
             load_strategy: None,
             support_info: None,
             supports_projections: None,
+            custom_aql_queries: None,
         };
         let init_result = graph_loader.initialize().await;
         init_result?;
@@ -374,6 +376,35 @@ impl GraphLoader {
         Ok(graph_loader)
     }
 
+    /// Create a GraphLoader with custom AQL queries
+    /// 
+    /// This allows you to provide custom AQL queries with filtering capabilities.
+    /// You can either provide separate vertex and edge queries, or a combined query.
+    pub async fn new_with_custom_aql(
+        db_config: DatabaseConfiguration,
+        load_config: DataLoadConfiguration,
+        custom_queries: CustomAqlQueries,
+    ) -> Result<Self, GraphLoaderError> {
+        custom_queries.validate().map_err(|e| GraphLoaderError::from(e))?;
+
+        let graph_loader = GraphLoader {
+            db_config,
+            load_config,
+            v_collections: HashMap::new(),
+            e_collections: HashMap::new(),
+            vertex_map: HashMap::new(),
+            edge_map: HashMap::new(),
+            load_strategy: Some(LoadStrategy::CustomAql),
+            support_info: None,
+            supports_projections: None,
+            custom_aql_queries: Some(custom_queries),
+        };
+
+        // For custom AQL, we don't need to initialize shard maps or check versions
+        // The queries handle everything
+        Ok(graph_loader)
+    }
+
     pub async fn do_vertices<F>(&self, vertices_function: F) -> Result<(), GraphLoaderError>
     where
         F: Fn(&Vec<Vec<u8>>, &mut Vec<Vec<Value>>, &Vec<String>) -> Result<(), GraphLoaderError>
@@ -395,8 +426,14 @@ impl GraphLoader {
                 let insert_vertex_clone = vertices_function.clone();
                 let strategy_clone = self.load_strategy;
                 let load_config_clone = self.load_config.clone();
+                let is_combined_query = self
+                    .custom_aql_queries
+                    .as_ref()
+                    .map(|q| q.combined_query.is_some())
+                    .unwrap_or(false);
 
                 let consumer = std::thread::spawn(move || -> Result<(), GraphLoaderError> {
+                    let is_combined = is_combined_query;
                     let begin = SystemTime::now();
                     while let Some(resp) = receiver.blocking_recv() {
                         let body_result = std::str::from_utf8(resp.as_ref());
@@ -470,8 +507,68 @@ impl GraphLoader {
                                     vertex_json.push(cols);
                                 }
                             }
+                        } else if strategy_clone == Option::from(LoadStrategy::CustomAql) {
+                            // Custom AQL query variant
+                            let values = match serde_json::from_str::<CursorResult>(body) {
+                                Err(err) => {
+                                    return Err(GraphLoaderError::JsonParseError(format!(
+                                        "Custom AQL Error parsing document for body:\n{}\n{:?}",
+                                        body, err
+                                    )));
+                                }
+                                Ok(val) => val,
+                            };
+
+                            for mut vertex in values.result.into_iter() {
+                                // For combined queries, filter by _type field
+                                if is_combined {
+                                    let doc_type = vertex.get("_type").and_then(|v| v.as_str());
+                                    if doc_type != Some("vertex") {
+                                        continue; // Skip non-vertex documents
+                                    }
+                                    // Remove _type field as it's not part of the vertex data
+                                    vertex.as_object_mut().and_then(|o| o.remove("_type"));
+                                }
+
+                                let id = &vertex["_id"];
+                                let idstr: &String = match id {
+                                    Value::String(i) => {
+                                        let mut buf = vec![];
+                                        buf.extend_from_slice(i[..].as_bytes());
+                                        vertex_ids.push(buf);
+                                        i
+                                    }
+                                    _ => {
+                                        return Err(GraphLoaderError::JsonParseError(format!(
+                                            "JSON is no object with a string _id attribute:\n{}",
+                                            vertex
+                                        )));
+                                    }
+                                };
+
+                                if load_config_clone.load_all_vertex_attributes {
+                                    vertex.as_object_mut().unwrap().remove("_id");
+                                    vertex_json.push(vec![vertex]);
+                                } else {
+                                    let get_value = |v: &Value, field: &str| -> Value {
+                                        if field == "@collection_name" {
+                                            Value::String(collection_name_from_id(idstr))
+                                        } else {
+                                            v[field].clone()
+                                        }
+                                    };
+
+                                    let mut cols: Vec<Value> =
+                                        Vec::with_capacity(vertex_global_fields.len());
+                                    for f in vertex_global_fields.iter() {
+                                        let j = get_value(&vertex, f);
+                                        cols.push(j);
+                                    }
+                                    vertex_json.push(cols);
+                                }
+                            }
                         } else {
-                            // This it the AQL Loading variant
+                            // This is the AQL Loading variant
                             let values = match serde_json::from_str::<CursorResult>(body) {
                                 Err(err) => {
                                     return Err(GraphLoaderError::JsonParseError(format!(
@@ -597,6 +694,50 @@ impl GraphLoader {
                         )));
                     }
                 }
+                Some(LoadStrategy::CustomAql) => {
+                    let custom_queries = self.custom_aql_queries.as_ref().ok_or_else(|| {
+                        GraphLoaderError::from("Custom AQL queries not set".to_string())
+                    })?;
+
+                    if let Some(vertex_query) = &custom_queries.vertex_query {
+                        let aql_result = execute_custom_aql_query(
+                            &self.db_config,
+                            &self.load_config,
+                            vertex_query.clone(),
+                            custom_queries.bind_vars.clone(),
+                            senders,
+                        )
+                        .await;
+                        if let Err(e) = aql_result {
+                            error!("Error fetching vertex data with custom AQL: {:?}", e);
+                            return Err(GraphLoaderError::from(format!(
+                                "Failed to execute custom AQL query for vertices: {}",
+                                e
+                            )));
+                        }
+                    } else if let Some(combined_query) = &custom_queries.combined_query {
+                        // For combined queries, we'll filter vertices in the consumer thread
+                        let aql_result = execute_custom_aql_query(
+                            &self.db_config,
+                            &self.load_config,
+                            combined_query.clone(),
+                            custom_queries.bind_vars.clone(),
+                            senders,
+                        )
+                        .await;
+                        if let Err(e) = aql_result {
+                            error!("Error fetching data with combined AQL query: {:?}", e);
+                            return Err(GraphLoaderError::from(format!(
+                                "Failed to execute combined AQL query: {}",
+                                e
+                            )));
+                        }
+                    } else {
+                        return Err(GraphLoaderError::from(
+                            "No vertex query or combined query provided".to_string(),
+                        ));
+                    }
+                }
                 None => {
                     return Err(GraphLoaderError::from("Load strategy not set".to_string()));
                 }
@@ -650,8 +791,14 @@ impl GraphLoader {
             let insert_edge_clone = edges_function.clone();
             let strategy_clone = self.load_strategy;
             let load_config_clone = self.load_config.clone();
+            let is_combined_query = self
+                .custom_aql_queries
+                .as_ref()
+                .map(|q| q.combined_query.is_some())
+                .unwrap_or(false);
 
             let consumer = std::thread::spawn(move || -> Result<(), GraphLoaderError> {
+                let is_combined = is_combined_query;
                 while let Some(resp) = receiver.blocking_recv() {
                     let body = std::str::from_utf8(resp.as_ref())
                         .map_err(|e| format!("UTF8 error when parsing body: {:?}", e))?;
@@ -717,6 +864,92 @@ impl GraphLoader {
                                 // If we get here, we have to extract the field
                                 // values in `fields` from the json and store it
                                 // to edge_json:
+                                let get_value = |v: &Value, field: &str| -> Value {
+                                    if field == "@collection_name" {
+                                        if let Some(id) = idstr {
+                                            Value::String(collection_name_from_id(id))
+                                        } else {
+                                            Value::String("n/A - _id is missing".to_string())
+                                        }
+                                    } else {
+                                        v[field].clone()
+                                    }
+                                };
+
+                                let mut cols: Vec<Value> =
+                                    Vec::with_capacity(edge_global_fields.len());
+                                for f in edge_global_fields.iter() {
+                                    let j = get_value(&edge, f);
+                                    cols.push(j);
+                                }
+
+                                edge_json.push(cols);
+                            }
+                        }
+                    } else if strategy_clone == Option::from(LoadStrategy::CustomAql) {
+                        // Custom AQL query variant
+                        let values = match serde_json::from_str::<CursorResult>(body) {
+                            Err(err) => {
+                                return Err(GraphLoaderError::from(format!(
+                                    "Custom AQL Error parsing document for body:\n{}\n{:?}",
+                                    body, err
+                                )));
+                            }
+                            Ok(val) => val,
+                        };
+
+                        for mut edge in values.result.into_iter() {
+                            // For combined queries, filter by _type field
+                            if is_combined {
+                                let doc_type = edge.get("_type").and_then(|v| v.as_str());
+                                if doc_type != Some("edge") {
+                                    continue; // Skip non-edge documents
+                                }
+                                // Remove _type field as it's not part of the edge data
+                                edge.as_object_mut().and_then(|o| o.remove("_type"));
+                            }
+
+                            let from = &edge["_from"];
+                            match from {
+                                Value::String(i) => {
+                                    let mut buf = vec![];
+                                    buf.extend_from_slice(i[..].as_bytes());
+                                    froms.push(buf);
+                                }
+                                _ => {
+                                    return Err(GraphLoaderError::from(format!(
+                                        "JSON is no object with a string _from attribute:\n{}",
+                                        edge
+                                    )));
+                                }
+                            }
+                            let to = &edge["_to"];
+
+                            match to {
+                                Value::String(i) => {
+                                    let mut buf = vec![];
+                                    buf.extend_from_slice(i[..].as_bytes());
+                                    tos.push(buf);
+                                }
+                                _ => {
+                                    return Err(GraphLoaderError::from(format!(
+                                        "JSON is no object with a string _to attribute:\n{}",
+                                        edge
+                                    )));
+                                }
+                            }
+
+                            if load_config_clone.load_all_edge_attributes {
+                                edge.as_object_mut().unwrap().remove("_from");
+                                edge.as_object_mut().unwrap().remove("_to");
+                                edge_json.push(vec![edge]);
+                            } else {
+                                let id = &edge["_id"];
+                                let idstr: Option<&String> = match id {
+                                    Value::String(i) => Some(i),
+                                    _ => None,
+                                };
+
                                 let get_value = |v: &Value, field: &str| -> Value {
                                     if field == "@collection_name" {
                                         if let Some(id) = idstr {
@@ -883,6 +1116,50 @@ impl GraphLoader {
                         "Failed to get aql cursor data: {}",
                         e
                     )));
+                }
+            }
+            Some(LoadStrategy::CustomAql) => {
+                let custom_queries = self.custom_aql_queries.as_ref().ok_or_else(|| {
+                    GraphLoaderError::from("Custom AQL queries not set".to_string())
+                })?;
+
+                if let Some(edge_query) = &custom_queries.edge_query {
+                    let aql_result = execute_custom_aql_query(
+                        &self.db_config,
+                        &self.load_config,
+                        edge_query.clone(),
+                        custom_queries.bind_vars.clone(),
+                        senders,
+                    )
+                    .await;
+                    if let Err(e) = aql_result {
+                        error!("Error fetching edge data with custom AQL: {:?}", e);
+                        return Err(GraphLoaderError::from(format!(
+                            "Failed to execute custom AQL query for edges: {}",
+                            e
+                        )));
+                    }
+                } else if let Some(combined_query) = &custom_queries.combined_query {
+                    // For combined queries, we'll filter edges in the consumer thread
+                    let aql_result = execute_custom_aql_query(
+                        &self.db_config,
+                        &self.load_config,
+                        combined_query.clone(),
+                        custom_queries.bind_vars.clone(),
+                        senders,
+                    )
+                    .await;
+                    if let Err(e) = aql_result {
+                        error!("Error fetching data with combined AQL query: {:?}", e);
+                        return Err(GraphLoaderError::from(format!(
+                            "Failed to execute combined AQL query: {}",
+                            e
+                        )));
+                    }
+                } else {
+                    return Err(GraphLoaderError::from(
+                        "No edge query or combined query provided".to_string(),
+                    ));
                 }
             }
             None => {

@@ -29,14 +29,15 @@ struct CreateCursorBody {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     batch_size: Option<u32>,
-    bind_vars: Option<HashMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bind_vars: Option<HashMap<String, serde_json::Value>>,
 }
 
 impl CreateCursorBody {
     pub fn from_streaming_query_with_size(
         query: String,
         batch_size: Option<u32>,
-        bind_vars: Option<HashMap<String, String>>,
+        bind_vars: Option<HashMap<String, serde_json::Value>>,
     ) -> Self {
         Self {
             query,
@@ -91,7 +92,8 @@ pub async fn get_all_data_aql(
 
     for col in collections.iter() {
         let query = build_aql_query(col, is_edge, load_all_attributes);
-        let bind_vars = HashMap::from([("@col".to_string(), col.name.clone())]);
+        let mut bind_vars: HashMap<String, serde_json::Value> = HashMap::new();
+        bind_vars.insert("@col".to_string(), serde_json::Value::String(col.name.clone()));
         let body = CreateCursorBody::from_streaming_query_with_size(query, None, Some(bind_vars));
         let body_v = serde_json::to_vec::<CreateCursorBody>(&body)
             .expect("could not serialize DumpStartBody");
@@ -295,4 +297,171 @@ fn build_aql_query(
         identifiers, field_strings
     );
     query
+}
+
+/// Execute a custom AQL query with streaming cursor
+pub async fn execute_custom_aql_query(
+    db_config: &DatabaseConfiguration,
+    _load_config: &DataLoadConfiguration,
+    query: String,
+    bind_vars: Option<HashMap<String, serde_json::Value>>,
+    result_channels: Vec<tokio::sync::mpsc::Sender<Bytes>>,
+) -> Result<(), String> {
+    let begin = SystemTime::now();
+    let use_tls = db_config.endpoints[0].starts_with("https://");
+    let client_config = ClientConfig::builder()
+        .n_retries(5)
+        .use_tls(use_tls)
+        .tls_cert_opt(db_config.tls_cert.clone())
+        .build();
+    let client = build_client(&client_config)?;
+
+    let make_cursor_url = |path: &str| -> String {
+        let suffix = "/_api/cursor".to_owned() + path;
+        make_url(db_config, suffix.as_str())
+    };
+
+    let mut cursor_ids = vec![];
+    let mut error_occurred = false;
+    let mut error: String = "".into();
+
+    let mut task_set = JoinSet::new();
+
+    let body = CreateCursorBody::from_streaming_query_with_size(query.clone(), None, bind_vars);
+    let body_v = serde_json::to_vec::<CreateCursorBody>(&body)
+        .expect("could not serialize CreateCursorBody");
+    let url = make_cursor_url("");
+    let cursor_create_resp = handle_auth(client.post(url), db_config)
+        .body(body_v)
+        .send()
+        .await;
+
+    if let Err(create_error) = cursor_create_resp {
+        error_occurred = true;
+        error = create_error.to_string();
+    } else {
+        let response = cursor_create_resp.unwrap();
+        let bytes_res = response
+            .bytes()
+            .await
+            .map_err(|e| format!("Error in body: {:?}", e))?;
+        let response_info = serde_json::from_slice::<CursorResponse>(&bytes_res.clone());
+
+        if let Err(create_error) = response_info {
+            error_occurred = true;
+            error = format!("An error in parsing a cursor occurred: {}", create_error);
+        } else {
+            let cursor_resp = response_info.unwrap();
+            let id = cursor_resp.id;
+
+            result_channels[0]
+                .clone()
+                .send(bytes_res)
+                .await
+                .expect("Could not send to channel");
+            
+            if let Some(id) = id {
+                if cursor_resp.has_more.unwrap_or(false) {
+                    cursor_ids.push(id.clone());
+
+                    let client_clone = client.clone();
+                    // For single query execution, use first endpoint and first consumer channel
+                    let endpoint_clone = db_config.endpoints[0].clone();
+                    let database_clone = db_config.database.clone();
+                    let result_channel_clone = result_channels[0].clone();
+                    let connection_config_clone = (*db_config).clone();
+
+                    task_set.spawn(async move {
+                        loop {
+                            let url = format!(
+                                "{}/_db/{}/_api/cursor/{}",
+                                endpoint_clone, database_clone, id,
+                            );
+                            let start = SystemTime::now();
+                            debug!(
+                                "{:?} Sending post request: {} ",
+                                start.duration_since(begin).unwrap(),
+                                id,
+                            );
+                            let resp = handle_auth(client_clone.post(url), &connection_config_clone)
+                                .send()
+                                .await;
+                            let resp =
+                                crate::request::handle_arangodb_response(resp, |c| c == StatusCode::OK)
+                                    .await?;
+                            let end = SystemTime::now();
+                            let dur = end.duration_since(start).unwrap();
+                            let bytes_res = resp
+                                .bytes()
+                                .await
+                                .map_err(|e| format!("Error in body: {:?}", e))?;
+                            let response_info =
+                                serde_json::from_slice::<CursorResponse>(&bytes_res.clone())
+                                    .map_err(|e| format!("Error in body: {:?}", e))?;
+                            result_channel_clone
+                                .send(bytes_res)
+                                .await
+                                .expect("Could not send to channel!");
+                            if !response_info.has_more.unwrap_or(false) {
+                                debug!(
+                                    "{:?} Cursor exhausted, got final response... {} {:?}",
+                                    end.duration_since(start).unwrap(),
+                                    id,
+                                    dur
+                                );
+                                return Ok::<(), String>(());
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    }
+
+    let client_for_cursor_close = client.clone();
+    let cleanup_cursors = |cursor_ids: Vec<String>| async move {
+        for cursor_id in cursor_ids.into_iter() {
+            let delete_cursor_url = make_cursor_url(&format!("/{}", cursor_id));
+            let resp = handle_auth(client_for_cursor_close.delete(delete_cursor_url), db_config)
+                .send()
+                .await;
+            let r = crate::request::handle_arangodb_response(resp, |c| {
+                c == StatusCode::ACCEPTED || c == StatusCode::NOT_FOUND
+            })
+            .await;
+            if let Err(error) = r {
+                eprintln!(
+                    "An error in cancelling a cursor occurred, cursor: {}, error: {}",
+                    cursor_id, error
+                );
+            }
+        }
+    };
+
+    if error_occurred {
+        cleanup_cursors(cursor_ids).await;
+        return Err(error);
+    }
+
+    while let Some(res) = task_set.join_next().await {
+        let r = match res {
+            Ok(_) => Ok(()),
+            Err(msg) => {
+                println!("Got error result: {}", msg);
+                Err(msg)
+            }
+        };
+        match r {
+            Ok(_x) => {
+                debug!("Got OK result!");
+            }
+            Err(msg) => {
+                debug!("Got error result: {}", msg);
+            }
+        }
+    }
+
+    cleanup_cursors(cursor_ids).await;
+    debug!("Done with cleanup");
+    Ok(())
 }

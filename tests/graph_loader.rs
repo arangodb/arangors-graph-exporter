@@ -1,8 +1,8 @@
 use arangors::graph::{EdgeDefinition, Graph};
 use arangors::Connection;
 use arangors_graph_exporter::{
-    CollectionInfo, DataLoadConfiguration, DataLoadConfigurationBuilder, DatabaseConfiguration,
-    DatabaseConfigurationBuilder, GraphLoader,
+    CollectionInfo, CustomAqlQueries, DataLoadConfiguration, DataLoadConfigurationBuilder,
+    DatabaseConfiguration, DatabaseConfigurationBuilder, GraphLoader, load_with_custom_aql,
 };
 use serial_test::serial;
 
@@ -904,4 +904,219 @@ async fn init_unknown_custom_graph_loader() {
         // as we are not in a cluster, we can compute the shard map during init
         assert!(graph_loader_res.is_ok());
     }
+}
+
+#[tokio::test]
+#[serial]
+async fn test_custom_aql_separate_queries() {
+    setup(true).await;
+    let db_config = build_db_config();
+    let load_config = build_load_config();
+
+    let vertex_query = format!(
+        "FOR v IN {} RETURN v",
+        VERTEX_COLLECTION
+    );
+    let edge_query = format!(
+        "FOR e IN {} RETURN e",
+        EDGE_COLLECTION
+    );
+
+    let custom_queries = CustomAqlQueries::new_separate(vertex_query, edge_query, None);
+    let graph_loader_res = load_with_custom_aql(db_config, load_config, custom_queries).await;
+
+    assert!(graph_loader_res.is_ok());
+
+    let graph_loader = graph_loader_res.unwrap();
+    
+    // Test vertices
+    let handle_vertices = move |vertex_ids: &Vec<Vec<u8>>,
+                                columns: &mut Vec<Vec<Value>>,
+                                _vertex_field_names: &Vec<String>| {
+        assert_eq!(vertex_ids.len(), 10);
+        assert_eq!(columns.len(), 10);
+        Ok(())
+    };
+    let vertices_result = graph_loader.do_vertices(handle_vertices).await;
+    assert!(vertices_result.is_ok());
+
+    // Test edges
+    let handle_edges = move |from_ids: &Vec<Vec<u8>>,
+                            to_ids: &Vec<Vec<u8>>,
+                            _columns: &mut Vec<Vec<Value>>,
+                            _edge_field_names: &Vec<String>| {
+        assert_eq!(from_ids.len(), 9);
+        assert_eq!(to_ids.len(), 9);
+        Ok(())
+    };
+    let edges_result = graph_loader.do_edges(handle_edges).await;
+    assert!(edges_result.is_ok());
+
+    teardown().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn test_custom_aql_separate_queries_with_filtering() {
+    setup(true).await;
+    let db_config = build_db_config();
+    let load_config = build_load_config();
+
+    // Filter vertices where x > 5 (should return 5 vertices: 5, 6, 7, 8, 9)
+    let vertex_query = format!(
+        "FOR v IN {} FILTER v.x > 5 RETURN v",
+        VERTEX_COLLECTION
+    );
+    // Filter edges where y > 5 (should return 5 edges: indices 4-8 with y values 6, 7, 8, 9, 10)
+    let edge_query = format!(
+        "FOR e IN {} FILTER e.y > 5 RETURN e",
+        EDGE_COLLECTION
+    );
+
+    let custom_queries = CustomAqlQueries::new_separate(vertex_query, edge_query, None);
+    let graph_loader_res = load_with_custom_aql(db_config, load_config, custom_queries).await;
+
+    assert!(graph_loader_res.is_ok());
+
+    let graph_loader = graph_loader_res.unwrap();
+    
+    // Test filtered vertices
+    let handle_vertices = move |vertex_ids: &Vec<Vec<u8>>,
+                                _columns: &mut Vec<Vec<Value>>,
+                                _vertex_field_names: &Vec<String>| {
+        assert_eq!(vertex_ids.len(), 5); // Should be 5 vertices (indices 5-9)
+        Ok(())
+    };
+    let vertices_result = graph_loader.do_vertices(handle_vertices).await;
+    assert!(vertices_result.is_ok());
+
+    // Test filtered edges
+    let handle_edges = move |from_ids: &Vec<Vec<u8>>,
+                            to_ids: &Vec<Vec<u8>>,
+                            _columns: &mut Vec<Vec<Value>>,
+                            _edge_field_names: &Vec<String>| {
+        assert_eq!(from_ids.len(), 5); // Should be 5 edges (indices 4-8)
+        assert_eq!(to_ids.len(), 5);
+        Ok(())
+    };
+    let edges_result = graph_loader.do_edges(handle_edges).await;
+    assert!(edges_result.is_ok());
+
+    teardown().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn test_custom_aql_combined_query() {
+    setup(true).await;
+    let db_config = build_db_config();
+    let load_config = build_load_config();
+
+    // Combined query that returns both vertices and edges with _type field
+    // Using LET and FLATTEN to combine results from both collections
+    let combined_query = format!(
+        r#"LET vertices = (FOR v IN {} RETURN MERGE(v, {{_type: "vertex"}}))
+        LET edges = (FOR e IN {} RETURN MERGE(e, {{_type: "edge"}}))
+        FOR doc IN APPEND(vertices, edges)
+        RETURN doc"#,
+        VERTEX_COLLECTION, EDGE_COLLECTION
+    );
+
+    let custom_queries = CustomAqlQueries::new_combined(combined_query, None);
+    let graph_loader_res = load_with_custom_aql(db_config, load_config, custom_queries).await;
+
+    assert!(graph_loader_res.is_ok());
+
+    let graph_loader = graph_loader_res.unwrap();
+    
+    // Test vertices from combined query
+    let handle_vertices = move |vertex_ids: &Vec<Vec<u8>>,
+                                _columns: &mut Vec<Vec<Value>>,
+                                _vertex_field_names: &Vec<String>| {
+        assert_eq!(vertex_ids.len(), 10);
+        Ok(())
+    };
+    let vertices_result = graph_loader.do_vertices(handle_vertices).await;
+    assert!(vertices_result.is_ok());
+
+    // Test edges from combined query
+    let handle_edges = move |from_ids: &Vec<Vec<u8>>,
+                            to_ids: &Vec<Vec<u8>>,
+                            _columns: &mut Vec<Vec<Value>>,
+                            _edge_field_names: &Vec<String>| {
+        assert_eq!(from_ids.len(), 9);
+        assert_eq!(to_ids.len(), 9);
+        Ok(())
+    };
+    let edges_result = graph_loader.do_edges(handle_edges).await;
+    assert!(edges_result.is_ok());
+
+    teardown().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn test_custom_aql_with_bind_vars() {
+    setup(true).await;
+    let db_config = build_db_config();
+    let load_config = build_load_config();
+
+    use std::collections::HashMap;
+    let mut bind_vars = HashMap::new();
+    bind_vars.insert("min_x".to_string(), serde_json::Value::Number(5.into()));
+    // Note: @@collection in query means bind var name is @collection (with @ prefix)
+    bind_vars.insert("@collection".to_string(), serde_json::Value::String(VERTEX_COLLECTION.to_string()));
+
+    // Use bind variables in query
+    let vertex_query = "FOR v IN @@collection FILTER v.x >= @min_x RETURN v".to_string();
+    let edge_query = format!("FOR e IN {} RETURN e", EDGE_COLLECTION);
+
+    let custom_queries = CustomAqlQueries::new_separate(vertex_query, edge_query, Some(bind_vars));
+    let graph_loader_res = load_with_custom_aql(db_config, load_config, custom_queries).await;
+
+    assert!(graph_loader_res.is_ok());
+
+    let graph_loader = graph_loader_res.unwrap();
+    
+    // Test vertices with bind vars (should return 6 vertices with x >= 5: indices 4-9)
+    let handle_vertices = move |vertex_ids: &Vec<Vec<u8>>,
+                                _columns: &mut Vec<Vec<Value>>,
+                                _vertex_field_names: &Vec<String>| {
+        assert_eq!(vertex_ids.len(), 6); // x >= 5 means indices 4-9 (x values 5,6,7,8,9,10)
+        Ok(())
+    };
+    let vertices_result = graph_loader.do_vertices(handle_vertices).await;
+    assert!(vertices_result.is_ok());
+
+    teardown().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn test_custom_aql_invalid_query() {
+    setup(true).await;
+    let db_config = build_db_config();
+    let load_config = build_load_config();
+
+    // Invalid query that will fail
+    let vertex_query = "FOR v IN nonexistent_collection RETURN v".to_string();
+    let edge_query = format!("FOR e IN {} RETURN e", EDGE_COLLECTION);
+
+    let custom_queries = CustomAqlQueries::new_separate(vertex_query, edge_query, None);
+    let graph_loader_res = load_with_custom_aql(db_config, load_config, custom_queries).await;
+
+    assert!(graph_loader_res.is_ok()); // Loader creation succeeds
+
+    let graph_loader = graph_loader_res.unwrap();
+    
+    // But executing the query should fail
+    let handle_vertices = move |_vertex_ids: &Vec<Vec<u8>>,
+                                _columns: &mut Vec<Vec<Value>>,
+                                _vertex_field_names: &Vec<String>| {
+        Ok(())
+    };
+    let vertices_result = graph_loader.do_vertices(handle_vertices).await;
+    assert!(vertices_result.is_err()); // Query execution should fail
+
+    teardown().await;
 }

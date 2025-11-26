@@ -29,4 +29,5 @@ pub struct SupportInfo {
 pub enum LoadStrategy {
     Dump,
     Aql,
+    CustomAql,
 }
