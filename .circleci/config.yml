@@ -45,6 +45,8 @@ jobs:
         type: string
       db-version:
         type: string
+      db-ssl:
+        type: string
     executor: generate-executor
     steps:
       - checkout
