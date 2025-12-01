@@ -1,17 +1,16 @@
 #!/bin/bash
 
 # Configuration environment variables:
-#   STARTER_MODE:             (single|cluster|activefailover), default single
-#   DOCKER_IMAGE:             ArangoDB docker image, default docker.io/arangodb/arangodb:latest
+#   STARTER_MODE:             (single|cluster), default single
+#   DOCKER_IMAGE:             ArangoDB docker image, default docker.io/arangodb/enterprise:latest
 #   SSL:                      (true|false), default false
 #   DATABASE_EXTENDED_NAMES:  (true|false), default false
-#   ARANGO_LICENSE_KEY:       only required for ArangoDB Enterprise
 
 # EXAMPLE:
 # STARTER_MODE=cluster SSL=true ./start_db.sh
 
 STARTER_MODE=${STARTER_MODE:=single}
-DOCKER_IMAGE=${DOCKER_IMAGE:=docker.io/arangodb/arangodb:latest}
+DOCKER_IMAGE=${DOCKER_IMAGE:=docker.io/arangodb/enterprise:latest}
 SSL=${SSL:=false}
 DATABASE_EXTENDED_NAMES=${DATABASE_EXTENDED_NAMES:=false}
 
@@ -112,8 +111,3 @@ for a in ${COORDINATORS[*]} ; do
     echo ""
 done
 
-if [ "$STARTER_MODE" == "activefailover" ]; then
-  LEADER=$("$LOCATION"/find_active_endpoint.sh)
-  echo "Leader: $SCHEME://$LEADER"
-  echo ""
-fi

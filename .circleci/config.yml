@@ -3,40 +3,31 @@ version: 2.1
 executors:
   generate-executor:
     machine:
-      image: ubuntu-2204:2024.01.1
+      image: ubuntu-2404:2025.09.1
     working_directory: ~/project
 
 workflows:
   version: 2
   ci:
     jobs:
-      - lint-rust
       - build
       - test-rust:
           requires:
-            - lint-rust
             - build
           matrix:
             parameters:
               db-mode: [ "single", "cluster" ]
-              db-version: [ "3.10", "3.11", "3.12", "nightly" ]
-              db-edition: [ "community", "enterprise" ]
+              db-version: [ "3.12", "nightly" ]
 
 jobs:
   build:
     docker:
-      - image: cimg/rust:1.75
+      - image: cimg/rust:1.90
     steps:
       - checkout
       - run:
           name: Compile arangors-graph-exporter
           command: cargo build --release
-
-  lint-rust:
-    docker:
-      - image: cimg/rust:1.75
-    steps:
-      - checkout
       - run:
           name: Install clippy
           command: rustup component add clippy
@@ -53,8 +44,6 @@ jobs:
         type: string
       db-version:
         type: string
-      db-edition:
-        type: string
     executor: generate-executor
     steps:
       - checkout
@@ -67,24 +56,15 @@ jobs:
           name: Set Docker Image
           command: |
             if [[ "<< parameters.db-version >>" == "nightly" ]]; then
-              if [[ "<< parameters.db-edition >>" == "enterprise" ]]; then
-                echo 'export DOCKER_IMAGE="docker.io/arangodb/enterprise-preview:devel-nightly"' >> $BASH_ENV
-              else
-                echo 'export DOCKER_IMAGE="docker.io/arangodb/arangodb-preview:devel-nightly"' >> $BASH_ENV
-              fi
+              echo 'export DOCKER_IMAGE="docker.io/arangodb/enterprise-preview:devel-nightly"' >> $BASH_ENV
             else
-              if [[ "<< parameters.db-edition >>" == "enterprise" ]]; then
-                echo 'export DOCKER_IMAGE="docker.io/arangodb/enterprise:<< parameters.db-version >>"' >> $BASH_ENV
-              else
-                echo 'export DOCKER_IMAGE="docker.io/arangodb/arangodb:<< parameters.db-version >>"' >> $BASH_ENV
-              fi
+              echo 'export DOCKER_IMAGE="docker.io/arangodb/enterprise:<< parameters.db-version >>"' >> $BASH_ENV
             fi
       - run:
           name: Start Database
           command: ./docker/start_db.sh
           environment:
             STARTER_MODE: << parameters.db-mode >>
-            #DOCKER_IMAGE: docker.io/arangodb/arangodb:<< parameters.db-version >>
             ARANGODB_DB_URL: http://172.28.0.1:8529
       - run:
           name: Cargo Test
