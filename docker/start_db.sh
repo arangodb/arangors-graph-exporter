@@ -44,7 +44,7 @@ if [ "$STARTER_MODE" == "single" ]; then
 fi
 
 if [ "$SSL" == "true" ]; then
-    STARTER_ARGS="$STARTER_ARGS --ssl.keyfile=server.pem"
+    STARTER_ARGS="$STARTER_ARGS --ssl.keyfile=/cfg/server.pem"
     SCHEME=https
     ARANGOSH_SCHEME=http+ssl
 fi
@@ -64,7 +64,6 @@ docker run -d \
     --volumes-from configs \
     $MOUNT_DATA \
     -v /var/run/docker.sock:/var/run/docker.sock \
-    -e ARANGO_LICENSE_KEY="$ARANGO_LICENSE_KEY" \
     $STARTER_DOCKER_IMAGE \
     $STARTER_ARGS \
     --docker.container=adb \
@@ -72,7 +71,7 @@ docker run -d \
     --starter.address="${GW}" \
     --docker.image="${DOCKER_IMAGE}" \
     --args.all.query.require-with="true" \
-    --starter.local --starter.mode=${STARTER_MODE} --all.log.level=debug --all.log.output=+ --log.verbose
+    --starter.local=true --starter.mode=${STARTER_MODE} --args.all.log.level=debug --args.all.log.output=+ --log.verbose
 
 
 wait_server() {
