@@ -1,5 +1,5 @@
-use arangors::graph::{EdgeDefinition, Graph};
 use arangors::Connection;
+use arangors::graph::{EdgeDefinition, Graph};
 use arangors_graph_exporter::{
     CollectionInfo, DataLoadConfiguration, DataLoadConfigurationBuilder, DatabaseConfiguration,
     DatabaseConfigurationBuilder, GraphLoader,

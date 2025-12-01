@@ -218,7 +218,8 @@ impl GraphLoader {
                     This can happen if the current user is not allowed to access the '/_admin/support-info' endpoint. \
                     Assuming ArangoDB instance version is at least '3.12'. \
                     We will use the aql load strategy as the loading strategy. \
-                    While this works, this will be slower then using the dump endpoint instead. ", e
+                    While this works, this will be slower then using the dump endpoint instead. ",
+                    e
                 );
                 None
             }
@@ -406,7 +407,7 @@ impl GraphLoader {
                                 return Err(GraphLoaderError::Utf8Error(format!(
                                     "UTF8 error when parsing body: {:?}",
                                     e
-                                )))
+                                )));
                             }
                         };
                         debug!(
@@ -433,7 +434,7 @@ impl GraphLoader {
                                 let idstr: &String = match id {
                                     Value::String(i) => {
                                         let mut buf = vec![];
-                                        buf.extend_from_slice(i[..].as_bytes());
+                                        buf.extend_from_slice(i.as_bytes());
                                         vertex_ids.push(buf);
                                         i
                                     }
@@ -487,7 +488,7 @@ impl GraphLoader {
                                 let idstr: &String = match id {
                                     Value::String(i) => {
                                         let mut buf = vec![];
-                                        buf.extend_from_slice(i[..].as_bytes());
+                                        buf.extend_from_slice(i.as_bytes());
                                         vertex_ids.push(buf);
                                         i
                                     }
@@ -676,7 +677,7 @@ impl GraphLoader {
                             match from {
                                 Value::String(i) => {
                                     let mut buf = vec![];
-                                    buf.extend_from_slice(i[..].as_bytes());
+                                    buf.extend_from_slice(i.as_bytes());
                                     froms.push(buf);
                                 }
                                 _ => {
@@ -691,7 +692,7 @@ impl GraphLoader {
                             match to {
                                 Value::String(i) => {
                                     let mut buf = vec![];
-                                    buf.extend_from_slice(i[..].as_bytes());
+                                    buf.extend_from_slice(i.as_bytes());
                                     tos.push(buf);
                                 }
                                 _ => {
@@ -756,7 +757,7 @@ impl GraphLoader {
                             match from {
                                 Value::String(i) => {
                                     let mut buf = vec![];
-                                    buf.extend_from_slice(i[..].as_bytes());
+                                    buf.extend_from_slice(i.as_bytes());
                                     froms.push(buf);
                                 }
                                 _ => {
@@ -771,7 +772,7 @@ impl GraphLoader {
                             match to {
                                 Value::String(i) => {
                                     let mut buf = vec![];
-                                    buf.extend_from_slice(i[..].as_bytes());
+                                    buf.extend_from_slice(i.as_bytes());
                                     tos.push(buf);
                                 }
                                 _ => {
@@ -1036,10 +1037,12 @@ async fn get_graph_collections(
     let (vertex_collections, edge_collections) =
         fetch_edge_and_vertex_collections_by_graph(db_config, url).await?;
     info!(
-            "{:?} Got vertex collections: {:?}, edge collections: {:?} from graph definition for: {:?}.",
-            SystemTime::now(),
-            vertex_collections, edge_collections, graph_name
-        );
+        "{:?} Got vertex collections: {:?}, edge collections: {:?} from graph definition for: {:?}.",
+        SystemTime::now(),
+        vertex_collections,
+        edge_collections,
+        graph_name
+    );
 
     Ok((vertex_collections, edge_collections))
 }

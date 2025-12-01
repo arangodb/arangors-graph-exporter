@@ -1,9 +1,9 @@
-use crate::client::config::ClientConfig;
 use crate::DatabaseConfiguration;
+use crate::client::config::ClientConfig;
 use reqwest::{Certificate, Client};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
-use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
+use reqwest_retry::policies::ExponentialBackoff;
 use std::fs::File;
 use std::io::Read;
 
