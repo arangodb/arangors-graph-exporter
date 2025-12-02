@@ -1,3 +1,4 @@
+use crate::aql_graph_loader::{AqlGraphLoader, AqlQuery, DataItem};
 use crate::config::{DataLoadConfiguration, DatabaseConfiguration};
 use crate::errors::GraphLoaderError;
 use crate::graph_loader::{CollectionInfo, GraphLoader};
@@ -27,4 +28,21 @@ pub async fn load_custom_graph(
     edge_collections: Vec<CollectionInfo>,
 ) -> Result<GraphLoader, GraphLoaderError> {
     GraphLoader::new_custom(db_config, load_config, vertex_collections, edge_collections).await
+}
+
+pub async fn load_aql_graph(
+    db_config: DatabaseConfiguration,
+    batch_size: u64,
+    vertex_attributes: Vec<DataItem>,
+    edge_attributes: Vec<DataItem>,
+    queries: Vec<Vec<AqlQuery>>,
+) -> Result<AqlGraphLoader, GraphLoaderError> {
+    AqlGraphLoader::new(
+        db_config,
+        batch_size,
+        vertex_attributes,
+        edge_attributes,
+        queries,
+    )
+    .await
 }
