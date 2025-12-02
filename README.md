@@ -73,7 +73,201 @@ async fn create_custom_graph_loader() -> Result<GraphLoader, GraphLoaderError> {
 }
 ```
 
-### Loading Data
+#### AQL-Based Graph Loading
+
+AQL-based graph loading provides a flexible way to load subgraphs from ArangoDB using custom AQL queries. This approach is particularly well-suited for:
+- Loading relatively small subgraphs
+- Using indexes or traversals to find the right subgraph
+- Applying complex filtering conditions to vertices and edges
+- Executing graph traversals to define the subgraph
+
+##### Graph Loading Specification
+
+A "graph loading specification" is a list of lists of AQL queries, where each query is a pair of a query string and a map of bind parameters. The specification has the following semantics:
+
+- The **outer list** is executed **sequentially**
+- Each **inner list** contains queries that can be executed **in parallel**
+- Each query must return items in the following format:
+
+```json
+{"vertices":[...], "edges":[...]}
+```
+
+Both `vertices` and `edges` attributes are optional. 
+- Vertex entries must contain at least an `_id` attribute
+- Edge entries must contain at least `_from` and `_to` attributes
+- Edge values can be `null` and will be silently ignored (useful for traversal start nodes)
+
+##### Attribute Specification
+
+You can declare the vertex and edge attributes upfront with their types for efficient columnar storage:
+
+```json
+{ "name": "string", "age": "number" }
+```
+
+The `_id` attribute for vertices and `_from`/`_to` attributes for edges are automatically included and don't need to be specified.
+
+##### Edge Buffering
+
+It's allowed to produce edges whose end-vertices appear later in the same query or in subsequent queries. The loader will buffer such edges until all vertices are available. For optimal performance, produce vertices before edges to minimize buffering.
+
+##### Example 1: Filtered Vertex and Edge Collections
+
+This example shows how to load a subgraph from multiple vertex and edge collections with filter conditions. The first inner list loads all vertices in parallel, and the second inner list loads all edges in parallel:
+
+```json
+[
+  [
+    {
+      "query": "FOR x IN vertices1 FILTER x.status == 'active' RETURN {vertices:[x]}", 
+      "bindVars": {}
+    },
+    {
+      "query": "FOR x IN vertices2 FILTER x.type == 'user' RETURN {vertices:[x]}", 
+      "bindVars": {}
+    }
+  ],
+  [
+    {
+      "query": "FOR y IN edges1 FILTER y.weight > @minWeight RETURN {edges:[y]}", 
+      "bindVars": {"minWeight": 0.5}
+    },
+    {
+      "query": "FOR y IN edges2 FILTER y.relation == 'follows' RETURN {edges:[y]}", 
+      "bindVars": {}
+    }
+  ]
+]
+```
+
+This approach ensures that all vertices are loaded first (no edge buffering needed), and allows parallel loading within each phase.
+
+##### Example 2: Graph Traversals
+
+This example shows how to use graph traversals to define the subgraph. Note that traversals produce both vertices and edges in the same result:
+
+```json
+[
+  [
+    {
+      "query": "FOR s IN @startids1 FOR x, y IN 0..10 OUTBOUND s GRAPH 'socialGraph' PRUNE x.depth > 5 FILTER x.active == true RETURN {vertices:[x], edges:[y]}",
+      "bindVars": {"startids1": ["users/123", "users/456"]}
+    },
+    {
+      "query": "FOR s IN @startids2 FOR x, y IN 0..10 OUTBOUND s GRAPH 'socialGraph' PRUNE x.depth > 5 FILTER x.active == true RETURN {vertices:[x], edges:[y]}",
+      "bindVars": {"startids2": ["users/789"]}
+    }
+  ]
+]
+```
+
+The depth 0 case includes the starting vertex with a `null` edge. Multiple traversals can be executed in parallel as shown above, or sequentially by placing them in separate inner lists:
+
+```json
+[
+  [
+    {
+      "query": "FOR s IN @startids1 FOR x, y IN 0..10 OUTBOUND s GRAPH 'socialGraph' RETURN {vertices:[x], edges:[y]}",
+      "bindVars": {"startids1": ["users/123"]}
+    }
+  ],
+  [
+    {
+      "query": "FOR s IN @startids2 FOR x, y IN 0..10 OUTBOUND s GRAPH 'socialGraph' RETURN {vertices:[x], edges:[y]}",
+      "bindVars": {"startids2": ["users/789"]}
+    }
+  ]
+]
+```
+
+##### Creating an AqlGraphLoader
+
+To create an AQL graph loader, use the `AqlGraphLoader::new` method:
+
+```rust
+use arangors_graph_exporter::{
+    AqlGraphLoader, AqlQuery, DataItem, DataType, DatabaseConfiguration, GraphLoaderError
+};
+use std::collections::HashMap;
+use serde_json::Value;
+
+async fn create_aql_graph_loader() -> Result<AqlGraphLoader, GraphLoaderError> {
+    let db_config = DatabaseConfiguration::new(/* parameters */);
+    let batch_size = 1000;
+    
+    // Define vertex attributes to load
+    let vertex_attributes = vec![
+        DataItem::new("name".to_string(), DataType::String),
+        DataItem::new("age".to_string(), DataType::U64),
+    ];
+    
+    // Define edge attributes to load
+    let edge_attributes = vec![
+        DataItem::new("weight".to_string(), DataType::F64),
+        DataItem::new("relation".to_string(), DataType::String),
+    ];
+    
+    // Create vertex queries (loaded in parallel)
+    let vertex_query1 = AqlQuery::new(
+        "FOR x IN vertices1 FILTER x.status == 'active' RETURN {vertices:[x]}".to_string(),
+        HashMap::new(),
+    );
+    let vertex_query2 = AqlQuery::new(
+        "FOR x IN vertices2 FILTER x.type == @vtype RETURN {vertices:[x]}".to_string(),
+        HashMap::from([("vtype".to_string(), Value::String("user".to_string()))]),
+    );
+    
+    // Create edge queries (loaded in parallel, after vertices)
+    let edge_query = AqlQuery::new(
+        "FOR e IN edges1 FILTER e.weight > @minWeight RETURN {edges:[e]}".to_string(),
+        HashMap::from([("minWeight".to_string(), Value::from(0.5))]),
+    );
+    
+    // Organize queries: outer list = sequential, inner list = parallel
+    let queries = vec![
+        vec![vertex_query1, vertex_query2], // Load vertices in parallel
+        vec![edge_query],                    // Then load edges
+    ];
+    
+    AqlGraphLoader::new(db_config, batch_size, vertex_attributes, edge_attributes, queries).await
+}
+```
+
+##### Example: Graph Traversal
+
+For graph traversals that produce vertices and edges together:
+
+```rust
+use arangors_graph_exporter::{AqlGraphLoader, AqlQuery, DataItem, DataType};
+
+async fn create_traversal_loader() -> Result<AqlGraphLoader, GraphLoaderError> {
+    let db_config = DatabaseConfiguration::new(/* parameters */);
+    let batch_size = 1000;
+    
+    // For traversals, we might not need extra attributes beyond _id, _from, _to
+    let vertex_attributes = vec![];
+    let edge_attributes = vec![
+        DataItem::new("depth".to_string(), DataType::U64),
+    ];
+    
+    // Traversal query that returns both vertices and edges
+    let traversal_query = AqlQuery::new(
+        "FOR v, e IN 0..10 OUTBOUND @start GRAPH 'socialGraph' \
+         PRUNE v.depth > 5 \
+         RETURN {vertices:[v], edges:[e]}".to_string(),
+        HashMap::from([
+            ("start".to_string(), Value::String("users/123".to_string()))
+        ]),
+    );
+    
+    let queries = vec![vec![traversal_query]];
+    
+    AqlGraphLoader::new(db_config, batch_size, vertex_attributes, edge_attributes, queries).await
+}
+```
+
+### Loading Data with GraphLoader
 
 Once the graph loader is initialized, you can load vertices and edges using the following methods:
 1. `do_vertices`: Load vertices from the graph.
@@ -107,6 +301,116 @@ let handle_edges = |from_ids: &Vec<Vec<u8>>, to_ids: &Vec<Vec<u8>>, columns: &mu
 
 let edges_result = graph_loader.do_edges(handle_edges).await?;
 ```
+
+### Loading Data with AqlGraphLoader
+
+Once the AQL graph loader is initialized, load the graph data using the `do_load` method with a callback function.
+
+#### The Callback Function
+
+The callback receives a mutable reference to a `GraphBatch` containing both vertices and edges. The batch structure includes:
+
+- **vertex_ids**: Vector of vertex IDs as byte vectors
+- **vertex_attributes**: Vector of attribute vectors, parallel to vertex_ids
+- **edge_from_ids**: Vector of source vertex IDs as byte vectors
+- **edge_to_ids**: Vector of target vertex IDs as byte vectors
+- **edge_attributes**: Vector of attribute vectors, parallel to edge IDs
+- **type_error_count**: Total number of type conversion errors encountered
+- **type_error_messages**: First few type error messages (up to 10)
+
+The callback signature is:
+
+```rust
+Fn(&mut GraphBatch) -> Result<(), GraphLoaderError>
+```
+
+#### Example: Basic Loading
+
+```rust
+use arangors_graph_exporter::GraphBatch;
+
+// Load the graph with a callback
+aql_loader.do_load(|batch: &mut GraphBatch| {
+    // Process vertices
+    for (i, vertex_id) in batch.vertex_ids.iter().enumerate() {
+        let id_str = String::from_utf8(vertex_id.clone()).unwrap();
+        let attributes = &batch.vertex_attributes[i];
+        
+        println!("Vertex {}: {:?}", id_str, attributes);
+        // Process vertex...
+    }
+    
+    // Process edges
+    for (i, from_id) in batch.edge_from_ids.iter().enumerate() {
+        let from_str = String::from_utf8(from_id.clone()).unwrap();
+        let to_str = String::from_utf8(batch.edge_to_ids[i].clone()).unwrap();
+        let attributes = &batch.edge_attributes[i];
+        
+        println!("Edge {} -> {}: {:?}", from_str, to_str, attributes);
+        // Process edge...
+    }
+    
+    // Check for type errors
+    if batch.type_error_count > 0 {
+        eprintln!("Warning: {} type conversion errors", batch.type_error_count);
+        for msg in &batch.type_error_messages {
+            eprintln!("  {}", msg);
+        }
+    }
+    
+    Ok(())
+}).await?;
+```
+
+#### Example: Collecting Data
+
+```rust
+use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+
+// Shared state to collect data
+let vertices = Arc::new(Mutex::new(HashMap::new()));
+let edges = Arc::new(Mutex::new(Vec::new()));
+
+let vertices_clone = vertices.clone();
+let edges_clone = edges.clone();
+
+// Load with closure that captures shared state
+aql_loader.do_load(move |batch: &mut GraphBatch| {
+    let mut v_map = vertices_clone.lock().unwrap();
+    let mut e_vec = edges_clone.lock().unwrap();
+    
+    // Collect vertices
+    for (i, vertex_id) in batch.vertex_ids.iter().enumerate() {
+        let id_str = String::from_utf8(vertex_id.clone()).unwrap();
+        let attrs = batch.vertex_attributes[i].clone();
+        v_map.insert(id_str, attrs);
+    }
+    
+    // Collect edges
+    for (i, from_id) in batch.edge_from_ids.iter().enumerate() {
+        let from_str = String::from_utf8(from_id.clone()).unwrap();
+        let to_str = String::from_utf8(batch.edge_to_ids[i].clone()).unwrap();
+        let attrs = batch.edge_attributes[i].clone();
+        e_vec.push((from_str, to_str, attrs));
+    }
+    
+    Ok(())
+}).await?;
+
+// Access collected data after loading
+let final_vertices = vertices.lock().unwrap();
+let final_edges = edges.lock().unwrap();
+println!("Loaded {} vertices and {} edges", final_vertices.len(), final_edges.len());
+```
+
+#### Important Notes
+
+- The callback is called multiple times as batches are loaded (batch size is configured during initialization)
+- Vertices and edges may arrive in the same batch (especially for traversal queries)
+- The callback must be `Send + Sync + Clone` to support parallel query execution
+- Attributes in `vertex_attributes` and `edge_attributes` correspond to the `DataItem` specifications provided during initialization
+- Type conversion errors are collected but don't stop the loading process; check `type_error_count` to handle them appropriately
 
 ## Configuration
 
