@@ -723,7 +723,7 @@ mod tests {
         let result = convert_and_validate(&val(json!(0.0)), &DataType::Bool, "field", "test_id");
         assert_eq!(result, Ok(Value::Bool(false)));
 
-        let result = convert_and_validate(&val(json!(3.14)), &DataType::Bool, "field", "test_id");
+        let result = convert_and_validate(&val(json!(3.15)), &DataType::Bool, "field", "test_id");
         assert_eq!(result, Ok(Value::Bool(true)));
     }
 
@@ -752,8 +752,8 @@ mod tests {
         assert_eq!(result, Ok(Value::String("42".to_string())));
 
         // From f64
-        let result = convert_and_validate(&val(json!(3.14)), &DataType::String, "field", "test_id");
-        assert_eq!(result, Ok(Value::String("3.14".to_string())));
+        let result = convert_and_validate(&val(json!(3.15)), &DataType::String, "field", "test_id");
+        assert_eq!(result, Ok(Value::String("3.15".to_string())));
 
         // From object/array (should convert to JSON string)
         let result = convert_and_validate(
@@ -879,10 +879,10 @@ mod tests {
 
     #[test]
     fn test_convert_f64_from_f64() {
-        let result = convert_and_validate(&val(json!(3.14)), &DataType::F64, "field", "test_id");
+        let result = convert_and_validate(&val(json!(3.15)), &DataType::F64, "field", "test_id");
         assert!(result.is_ok());
         if let Ok(Value::Number(n)) = result {
-            assert_eq!(n.as_f64(), Some(3.14));
+            assert_eq!(n.as_f64(), Some(3.15));
         }
 
         let result = convert_and_validate(&val(json!(-2.5)), &DataType::F64, "field", "test_id");
@@ -905,10 +905,10 @@ mod tests {
 
     #[test]
     fn test_convert_f64_from_string() {
-        let result = convert_and_validate(&val(json!("3.14")), &DataType::F64, "field", "test_id");
+        let result = convert_and_validate(&val(json!("3.15")), &DataType::F64, "field", "test_id");
         assert!(result.is_ok());
         if let Ok(Value::Number(n)) = result {
-            assert_eq!(n.as_f64(), Some(3.14));
+            assert_eq!(n.as_f64(), Some(3.15));
         }
 
         let result = convert_and_validate(&val(json!("-2.5")), &DataType::F64, "field", "test_id");
@@ -933,7 +933,7 @@ mod tests {
             json!(false),
             json!(42),
             json!(-42),
-            json!(3.14),
+            json!(3.15),
             json!("hello"),
             json!({"key": "value"}),
             json!([1, 2, 3]),

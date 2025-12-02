@@ -1554,3 +1554,175 @@ async fn test_aql_graph_loader_left_edges_only() {
 
     teardown().await;
 }
+
+#[tokio::test]
+#[serial]
+async fn test_aql_graph_loader_traversal_depth_6() {
+    // Create binary tree of depth 10 (so we have enough data for traversal)
+    create_binary_tree_graph(10).await;
+
+    let db_config = build_db_config();
+    let batch_size = 100;
+
+    // Expected counts for traversal from root to depth 6
+    // Vertices: sum from depth 0 to 6 = 2^7 - 1 = 127 vertices
+    let expected_vertices = 127;
+    // Edges: 126 (all vertices except root have a parent edge)
+    let expected_edges = 126;
+
+    // Build AQL traversal query that returns vertices and edges together
+    let traversal_query = AqlQuery::new(
+        format!(
+            "FOR v, e IN 0..6 OUTBOUND \"{}/0\" {} RETURN {{ vertices: [v], edges: [e] }}",
+            VERTEX_COLLECTION, EDGE_COLLECTION
+        ),
+        HashMap::new(),
+    );
+
+    // Create loader with depth attribute for edges only (no vertex attributes)
+    let loader = AqlGraphLoader::new(
+        db_config,
+        batch_size,
+        vec![],                                                  // No vertex attributes
+        vec![DataItem::new("depth".to_string(), DataType::U64)], // Edge depth only
+        vec![vec![traversal_query]],                             // Single query
+    )
+    .await
+    .unwrap();
+
+    // Track what we've received
+    let received_vertices = Arc::new(Mutex::new(HashSet::new()));
+    let received_edges = Arc::new(Mutex::new(Vec::new()));
+    let batch_count = Arc::new(Mutex::new(0));
+    let vertices_and_edges_together = Arc::new(Mutex::new(false));
+
+    let received_vertices_clone = received_vertices.clone();
+    let received_edges_clone = received_edges.clone();
+    let batch_count_clone = batch_count.clone();
+    let vertices_and_edges_together_clone = vertices_and_edges_together.clone();
+
+    // Load the graph
+    loader
+        .do_load(move |batch| {
+            let mut batch_count = batch_count_clone.lock().unwrap();
+            *batch_count += 1;
+
+            let mut received_v = received_vertices_clone.lock().unwrap();
+            let mut received_e = received_edges_clone.lock().unwrap();
+            let mut together = vertices_and_edges_together_clone.lock().unwrap();
+
+            // Check if vertices and edges arrive together in same batch
+            if !batch.vertex_ids.is_empty() && !batch.edge_from_ids.is_empty() {
+                *together = true;
+            }
+
+            // Collect vertices (no attributes)
+            for v_id in &batch.vertex_ids {
+                let id_str = String::from_utf8(v_id.clone()).unwrap();
+                received_v.insert(id_str);
+            }
+
+            // Verify no vertex attributes
+            assert_eq!(
+                batch.vertex_attributes.len(),
+                0,
+                "Expected no vertex attributes"
+            );
+
+            // Collect edges with depth
+            for ((from_id, to_id), attrs) in batch
+                .edge_from_ids
+                .iter()
+                .zip(batch.edge_to_ids.iter())
+                .zip(batch.edge_attributes.iter())
+            {
+                let from_str = String::from_utf8(from_id.clone()).unwrap();
+                let to_str = String::from_utf8(to_id.clone()).unwrap();
+
+                assert_eq!(attrs.len(), 1, "Expected 1 edge attribute (depth)");
+
+                // Verify depth is a u64
+                let edge_depth = attrs[0].as_u64().expect("Edge depth should be u64");
+
+                // Verify depth is within range
+                assert!(
+                    edge_depth <= 6,
+                    "Edge depth {} exceeds traversal limit",
+                    edge_depth
+                );
+
+                // Verify JSON value is actually a Number
+                assert!(attrs[0].is_u64(), "Edge depth should be stored as JSON u64");
+
+                received_e.push((from_str, to_str, edge_depth));
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    // Verify results (scope the locks to drop before await)
+    {
+        let received_v = received_vertices.lock().unwrap();
+        let received_e = received_edges.lock().unwrap();
+        let batch_count = batch_count.lock().unwrap();
+        let together = vertices_and_edges_together.lock().unwrap();
+
+        // Check counts
+        assert_eq!(
+            received_v.len(),
+            expected_vertices,
+            "Expected {} vertices, got {}",
+            expected_vertices,
+            received_v.len()
+        );
+        assert_eq!(
+            received_e.len(),
+            expected_edges,
+            "Expected {} edges, got {}",
+            expected_edges,
+            received_e.len()
+        );
+
+        // Verify we got exactly 2 batches as expected
+        assert_eq!(*batch_count, 2, "Expected 2 batches, got {}", *batch_count);
+
+        // Verify vertices and edges arrive together
+        assert!(
+            *together,
+            "Expected vertices and edges to arrive together in the same batch"
+        );
+
+        // Verify all edge depths are <= 6
+        for (_, _, depth) in received_e.iter() {
+            assert!(*depth <= 6, "Edge depth {} exceeds limit", *depth);
+        }
+
+        // Verify depth values match the tree structure
+        for (from_str, to_str, edge_depth) in received_e.iter() {
+            // Extract target vertex key
+            let to_key = to_str
+                .split('/')
+                .next_back()
+                .unwrap()
+                .parse::<usize>()
+                .unwrap();
+
+            // Calculate expected depth based on position in tree
+            let expected_depth = if to_key == 0 {
+                0
+            } else {
+                (to_key + 1).ilog2() as u64
+            };
+
+            assert_eq!(
+                *edge_depth, expected_depth,
+                "Edge {}-->{} has depth {} but expected {}",
+                from_str, to_str, edge_depth, expected_depth
+            );
+        }
+    }
+
+    teardown().await;
+}
