@@ -660,3 +660,409 @@ impl AqlGraphLoader {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // Helper function to create a Value from any JSON input
+    fn val(v: serde_json::Value) -> Value {
+        v
+    }
+
+    #[test]
+    fn test_convert_bool_from_bool() {
+        let result = convert_and_validate(&val(json!(true)), &DataType::Bool, "field", "test_id");
+        assert_eq!(result, Ok(Value::Bool(true)));
+
+        let result = convert_and_validate(&val(json!(false)), &DataType::Bool, "field", "test_id");
+        assert_eq!(result, Ok(Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_convert_bool_from_string() {
+        // Test various true representations
+        for s in &["true", "True", "TRUE", "1", "yes", "Yes", "YES"] {
+            let result = convert_and_validate(&val(json!(s)), &DataType::Bool, "field", "test_id");
+            assert_eq!(result, Ok(Value::Bool(true)), "Failed for string: {}", s);
+        }
+
+        // Test various false representations
+        for s in &["false", "False", "FALSE", "0", "no", "No", "NO"] {
+            let result = convert_and_validate(&val(json!(s)), &DataType::Bool, "field", "test_id");
+            assert_eq!(result, Ok(Value::Bool(false)), "Failed for string: {}", s);
+        }
+
+        // Test invalid string
+        let result =
+            convert_and_validate(&val(json!("maybe")), &DataType::Bool, "field", "test_id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_convert_bool_from_numbers() {
+        // From i64
+        let result = convert_and_validate(&val(json!(0)), &DataType::Bool, "field", "test_id");
+        assert_eq!(result, Ok(Value::Bool(false)));
+
+        let result = convert_and_validate(&val(json!(1)), &DataType::Bool, "field", "test_id");
+        assert_eq!(result, Ok(Value::Bool(true)));
+
+        let result = convert_and_validate(&val(json!(-5)), &DataType::Bool, "field", "test_id");
+        assert_eq!(result, Ok(Value::Bool(true)));
+
+        // From u64
+        let result = convert_and_validate(&val(json!(0u64)), &DataType::Bool, "field", "test_id");
+        assert_eq!(result, Ok(Value::Bool(false)));
+
+        let result = convert_and_validate(&val(json!(42u64)), &DataType::Bool, "field", "test_id");
+        assert_eq!(result, Ok(Value::Bool(true)));
+
+        // From f64
+        let result = convert_and_validate(&val(json!(0.0)), &DataType::Bool, "field", "test_id");
+        assert_eq!(result, Ok(Value::Bool(false)));
+
+        let result = convert_and_validate(&val(json!(3.14)), &DataType::Bool, "field", "test_id");
+        assert_eq!(result, Ok(Value::Bool(true)));
+    }
+
+    #[test]
+    fn test_convert_string_from_various_types() {
+        // From string
+        let result =
+            convert_and_validate(&val(json!("hello")), &DataType::String, "field", "test_id");
+        assert_eq!(result, Ok(Value::String("hello".to_string())));
+
+        // From null
+        let result = convert_and_validate(&val(json!(null)), &DataType::String, "field", "test_id");
+        assert_eq!(result, Ok(Value::String(String::new())));
+
+        // From bool
+        let result = convert_and_validate(&val(json!(true)), &DataType::String, "field", "test_id");
+        assert_eq!(result, Ok(Value::String("true".to_string())));
+
+        // From i64
+        let result = convert_and_validate(&val(json!(42)), &DataType::String, "field", "test_id");
+        assert_eq!(result, Ok(Value::String("42".to_string())));
+
+        // From u64
+        let result =
+            convert_and_validate(&val(json!(42u64)), &DataType::String, "field", "test_id");
+        assert_eq!(result, Ok(Value::String("42".to_string())));
+
+        // From f64
+        let result = convert_and_validate(&val(json!(3.14)), &DataType::String, "field", "test_id");
+        assert_eq!(result, Ok(Value::String("3.14".to_string())));
+
+        // From object/array (should convert to JSON string)
+        let result = convert_and_validate(
+            &val(json!({"key": "value"})),
+            &DataType::String,
+            "field",
+            "test_id",
+        );
+        assert!(result.is_ok());
+        if let Ok(Value::String(s)) = result {
+            assert!(s.contains("key"));
+            assert!(s.contains("value"));
+        }
+    }
+
+    #[test]
+    fn test_convert_u64_from_u64() {
+        let result = convert_and_validate(&val(json!(42u64)), &DataType::U64, "field", "test_id");
+        assert_eq!(result, Ok(json!(42)));
+
+        let result = convert_and_validate(&val(json!(0u64)), &DataType::U64, "field", "test_id");
+        assert_eq!(result, Ok(json!(0)));
+    }
+
+    #[test]
+    fn test_convert_u64_from_i64() {
+        // Positive i64 should work
+        let result = convert_and_validate(&val(json!(42)), &DataType::U64, "field", "test_id");
+        assert_eq!(result, Ok(json!(42)));
+
+        let result = convert_and_validate(&val(json!(0)), &DataType::U64, "field", "test_id");
+        assert_eq!(result, Ok(json!(0)));
+
+        // Negative i64 should fail
+        let result = convert_and_validate(&val(json!(-1)), &DataType::U64, "field", "test_id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_convert_u64_from_f64() {
+        // Positive float should round
+        let result = convert_and_validate(&val(json!(42.7)), &DataType::U64, "field", "test_id");
+        assert_eq!(result, Ok(json!(43)));
+
+        let result = convert_and_validate(&val(json!(42.3)), &DataType::U64, "field", "test_id");
+        assert_eq!(result, Ok(json!(42)));
+
+        // Negative float should fail
+        let result = convert_and_validate(&val(json!(-1.5)), &DataType::U64, "field", "test_id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_convert_u64_from_string() {
+        let result = convert_and_validate(&val(json!("42")), &DataType::U64, "field", "test_id");
+        assert_eq!(result, Ok(json!(42)));
+
+        // Invalid string should fail
+        let result = convert_and_validate(
+            &val(json!("not_a_number")),
+            &DataType::U64,
+            "field",
+            "test_id",
+        );
+        assert!(result.is_err());
+
+        // Negative string should fail
+        let result = convert_and_validate(&val(json!("-1")), &DataType::U64, "field", "test_id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_convert_i64_from_i64() {
+        let result = convert_and_validate(&val(json!(42)), &DataType::I64, "field", "test_id");
+        assert_eq!(result, Ok(json!(42)));
+
+        let result = convert_and_validate(&val(json!(-42)), &DataType::I64, "field", "test_id");
+        assert_eq!(result, Ok(json!(-42)));
+
+        let result = convert_and_validate(&val(json!(0)), &DataType::I64, "field", "test_id");
+        assert_eq!(result, Ok(json!(0)));
+    }
+
+    #[test]
+    fn test_convert_i64_from_u64() {
+        // u64 within i64 range should work
+        let result = convert_and_validate(&val(json!(42u64)), &DataType::I64, "field", "test_id");
+        assert_eq!(result, Ok(json!(42)));
+
+        // u64 exceeding i64::MAX should fail
+        let result =
+            convert_and_validate(&val(json!(u64::MAX)), &DataType::I64, "field", "test_id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_convert_i64_from_f64() {
+        // Float within range should round
+        let result = convert_and_validate(&val(json!(42.7)), &DataType::I64, "field", "test_id");
+        assert_eq!(result, Ok(json!(43)));
+
+        let result = convert_and_validate(&val(json!(-42.3)), &DataType::I64, "field", "test_id");
+        assert_eq!(result, Ok(json!(-42)));
+    }
+
+    #[test]
+    fn test_convert_i64_from_string() {
+        let result = convert_and_validate(&val(json!("42")), &DataType::I64, "field", "test_id");
+        assert_eq!(result, Ok(json!(42)));
+
+        let result = convert_and_validate(&val(json!("-42")), &DataType::I64, "field", "test_id");
+        assert_eq!(result, Ok(json!(-42)));
+
+        // Invalid string should fail
+        let result = convert_and_validate(
+            &val(json!("not_a_number")),
+            &DataType::I64,
+            "field",
+            "test_id",
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_convert_f64_from_f64() {
+        let result = convert_and_validate(&val(json!(3.14)), &DataType::F64, "field", "test_id");
+        assert!(result.is_ok());
+        if let Ok(Value::Number(n)) = result {
+            assert_eq!(n.as_f64(), Some(3.14));
+        }
+
+        let result = convert_and_validate(&val(json!(-2.5)), &DataType::F64, "field", "test_id");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_convert_f64_from_integers() {
+        // From i64
+        let result = convert_and_validate(&val(json!(42)), &DataType::F64, "field", "test_id");
+        assert!(result.is_ok());
+        if let Ok(Value::Number(n)) = result {
+            assert_eq!(n.as_f64(), Some(42.0));
+        }
+
+        // From u64
+        let result = convert_and_validate(&val(json!(42u64)), &DataType::F64, "field", "test_id");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_convert_f64_from_string() {
+        let result = convert_and_validate(&val(json!("3.14")), &DataType::F64, "field", "test_id");
+        assert!(result.is_ok());
+        if let Ok(Value::Number(n)) = result {
+            assert_eq!(n.as_f64(), Some(3.14));
+        }
+
+        let result = convert_and_validate(&val(json!("-2.5")), &DataType::F64, "field", "test_id");
+        assert!(result.is_ok());
+
+        // Invalid string should fail
+        let result = convert_and_validate(
+            &val(json!("not_a_number")),
+            &DataType::F64,
+            "field",
+            "test_id",
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_convert_json_accepts_anything() {
+        // JSON type should accept any value as-is
+        let test_values = vec![
+            json!(null),
+            json!(true),
+            json!(false),
+            json!(42),
+            json!(-42),
+            json!(3.14),
+            json!("hello"),
+            json!({"key": "value"}),
+            json!([1, 2, 3]),
+        ];
+
+        for value in test_values {
+            let result = convert_and_validate(&value, &DataType::JSON, "field", "test_id");
+            assert_eq!(result, Ok(value.clone()), "Failed for value: {:?}", value);
+        }
+    }
+
+    #[test]
+    fn test_default_values() {
+        assert_eq!(default_value_for_type(&DataType::Bool), Value::Bool(false));
+        assert_eq!(
+            default_value_for_type(&DataType::String),
+            Value::String(String::new())
+        );
+        assert_eq!(default_value_for_type(&DataType::U64), json!(0));
+        assert_eq!(default_value_for_type(&DataType::I64), json!(0));
+        assert!(default_value_for_type(&DataType::F64).is_number());
+        assert_eq!(default_value_for_type(&DataType::JSON), Value::Null);
+    }
+
+    #[test]
+    fn test_error_messages_contain_context() {
+        // Test that error messages include the attribute name and entity ID
+        let result = convert_and_validate(
+            &val(json!("invalid")),
+            &DataType::U64,
+            "my_field",
+            "entity_123",
+        );
+        assert!(result.is_err());
+        if let Err(msg) = result {
+            assert!(msg.contains("my_field"));
+            assert!(msg.contains("entity_123"));
+        }
+
+        let result = convert_and_validate(&val(json!(-1)), &DataType::U64, "age", "user:42");
+        assert!(result.is_err());
+        if let Err(msg) = result {
+            assert!(msg.contains("age"));
+            assert!(msg.contains("user:42"));
+        }
+    }
+
+    #[test]
+    fn test_graph_batch_type_error_tracking() {
+        let mut batch = GraphBatch::new();
+
+        assert_eq!(batch.type_error_count, 0);
+        assert_eq!(batch.type_error_messages.len(), 0);
+
+        // Add first error
+        batch.add_type_error("Error 1".to_string());
+        assert_eq!(batch.type_error_count, 1);
+        assert_eq!(batch.type_error_messages.len(), 1);
+
+        // Add more errors
+        for i in 2..=12 {
+            batch.add_type_error(format!("Error {}", i));
+        }
+
+        // Count should be 12, but messages capped at 10
+        assert_eq!(batch.type_error_count, 12);
+        assert_eq!(batch.type_error_messages.len(), 10);
+    }
+
+    #[test]
+    fn test_data_item_creation() {
+        let item = DataItem::new("test_field".to_string(), DataType::String);
+        assert_eq!(item.name, "test_field");
+        assert_eq!(item.data_type, DataType::String);
+    }
+
+    #[test]
+    fn test_aql_query_creation() {
+        let mut bind_vars = HashMap::new();
+        bind_vars.insert("param1".to_string(), json!("value1"));
+
+        let query = AqlQuery::new("FOR v IN vertices RETURN v".to_string(), bind_vars.clone());
+
+        assert_eq!(query.query, "FOR v IN vertices RETURN v");
+        assert_eq!(query.bind_vars.len(), 1);
+        assert_eq!(query.bind_vars.get("param1"), Some(&json!("value1")));
+    }
+
+    #[test]
+    fn test_convert_bool_from_object_should_fail() {
+        let result = convert_and_validate(
+            &val(json!({"key": "value"})),
+            &DataType::Bool,
+            "field",
+            "test_id",
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_convert_u64_from_object_should_fail() {
+        let result = convert_and_validate(
+            &val(json!({"key": "value"})),
+            &DataType::U64,
+            "field",
+            "test_id",
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_convert_i64_from_object_should_fail() {
+        let result = convert_and_validate(
+            &val(json!({"key": "value"})),
+            &DataType::I64,
+            "field",
+            "test_id",
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_convert_f64_from_object_should_fail() {
+        let result = convert_and_validate(
+            &val(json!({"key": "value"})),
+            &DataType::F64,
+            "field",
+            "test_id",
+        );
+        assert!(result.is_err());
+    }
+}
