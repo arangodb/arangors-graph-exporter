@@ -4,11 +4,14 @@ use arangors_graph_exporter::{
 };
 use serial_test::serial;
 
+use arangors_graph_exporter::aql_graph_loader::{AqlGraphLoader, AqlQuery, DataItem, DataType};
 use arangors_graph_exporter::client::config::ClientConfig;
 use arangors_graph_exporter::errors::GraphLoaderError;
 use rstest::fixture;
 use serde_json::{Value, json};
+use std::collections::{HashMap, HashSet};
 use std::env;
+use std::sync::{Arc, Mutex};
 
 static GRAPH: &str = "IntegrationTestGraph";
 static EDGE_COLLECTION: &str = "IntegrationTestEdge";
@@ -988,4 +991,566 @@ async fn init_unknown_custom_graph_loader() {
         // as we are not in a cluster, we can compute the shard map during init
         assert!(graph_loader_res.is_ok());
     }
+}
+
+// Helper function to create a binary tree of given depth
+async fn create_binary_tree_graph(depth: usize) {
+    let db_config = build_db_config();
+    let client = build_test_client();
+
+    // Drop graph if exists
+    let drop_url = format!("{}/_api/gharial/{}", db_config.endpoints[0], GRAPH);
+    let _ = client
+        .delete(&drop_url)
+        .basic_auth(USERNAME, Some(PASSWORD))
+        .query(&[("dropCollections", "true")])
+        .send()
+        .await;
+
+    // Create graph
+    let create_graph_body = json!({
+        "name": GRAPH,
+        "edgeDefinitions": [{
+            "collection": EDGE_COLLECTION,
+            "from": [VERTEX_COLLECTION],
+            "to": [VERTEX_COLLECTION]
+        }],
+        "orphanCollections": []
+    });
+
+    let create_url = format!("{}/_api/gharial", db_config.endpoints[0]);
+    let resp = client
+        .post(&create_url)
+        .basic_auth(USERNAME, Some(PASSWORD))
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(&create_graph_body).unwrap())
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        resp.status().is_success(),
+        "Failed to create graph: status={}",
+        resp.status()
+    );
+
+    // Calculate total number of vertices in a complete binary tree
+    // Formula: 2^(depth+1) - 1
+    let total_vertices = (1 << (depth + 1)) - 1;
+
+    // Insert vertices with depth attribute
+    let vertex_url = format!(
+        "{}/_api/document/{}",
+        db_config.endpoints[0], VERTEX_COLLECTION
+    );
+
+    for i in 0..total_vertices {
+        // Calculate depth: floor(log2(i+1))
+        let vertex_depth = if i == 0 {
+            0
+        } else {
+            ((i + 1) as u32).ilog2() as u64
+        };
+
+        let doc = json!({
+            "_key": i.to_string(),
+            "depth": vertex_depth
+        });
+        client
+            .post(&vertex_url)
+            .basic_auth(USERNAME, Some(PASSWORD))
+            .header("Content-Type", "application/json")
+            .body(serde_json::to_string(&doc).unwrap())
+            .send()
+            .await
+            .unwrap();
+    }
+
+    // Insert edges
+    let edge_url = format!(
+        "{}/_api/document/{}",
+        db_config.endpoints[0], EDGE_COLLECTION
+    );
+
+    let mut edge_key = 0;
+    for i in 0..total_vertices {
+        let left_child = 2 * i + 1;
+        let right_child = 2 * i + 2;
+
+        // Add left child edge if it exists
+        if left_child < total_vertices {
+            let child_depth = ((left_child + 1) as u32).ilog2() as u64;
+            let doc = json!({
+                "_key": edge_key.to_string(),
+                "_from": format!("{}/{}", VERTEX_COLLECTION, i),
+                "_to": format!("{}/{}", VERTEX_COLLECTION, left_child),
+                "depth": child_depth,
+                "type": "left"
+            });
+            client
+                .post(&edge_url)
+                .basic_auth(USERNAME, Some(PASSWORD))
+                .header("Content-Type", "application/json")
+                .body(serde_json::to_string(&doc).unwrap())
+                .send()
+                .await
+                .unwrap();
+            edge_key += 1;
+        }
+
+        // Add right child edge if it exists
+        if right_child < total_vertices {
+            let child_depth = ((right_child + 1) as u32).ilog2() as u64;
+            let doc = json!({
+                "_key": edge_key.to_string(),
+                "_from": format!("{}/{}", VERTEX_COLLECTION, i),
+                "_to": format!("{}/{}", VERTEX_COLLECTION, right_child),
+                "depth": child_depth,
+                "type": "right"
+            });
+            client
+                .post(&edge_url)
+                .basic_auth(USERNAME, Some(PASSWORD))
+                .header("Content-Type", "application/json")
+                .body(serde_json::to_string(&doc).unwrap())
+                .send()
+                .await
+                .unwrap();
+            edge_key += 1;
+        }
+    }
+}
+
+#[tokio::test]
+#[serial]
+async fn test_aql_graph_loader_full_topology() {
+    // Create binary tree of depth 10
+    create_binary_tree_graph(10).await;
+
+    let db_config = build_db_config();
+    let batch_size = 100;
+
+    // Expected counts
+    let total_vertices = (1 << 11) - 1; // 2047 vertices
+    let total_edges = total_vertices - 1; // 2046 edges
+
+    // Build AQL queries to load full topology
+    let vertex_query = AqlQuery::new(
+        format!(
+            "FOR v IN {} RETURN {{vertices: [{{_id: v._id}}]}}",
+            VERTEX_COLLECTION
+        ),
+        HashMap::new(),
+    );
+
+    let edge_query = AqlQuery::new(
+        format!(
+            "FOR e IN {} RETURN {{edges: [{{_from: e._from, _to: e._to}}]}}",
+            EDGE_COLLECTION
+        ),
+        HashMap::new(),
+    );
+
+    // Create loader with no attributes
+    let loader = AqlGraphLoader::new(
+        db_config,
+        batch_size,
+        vec![], // No vertex attributes
+        vec![], // No edge attributes
+        vec![vec![vertex_query], vec![edge_query]],
+    )
+    .await
+    .unwrap();
+
+    // Track what we've received
+    let received_vertices = Arc::new(Mutex::new(HashSet::new()));
+    let received_edges = Arc::new(Mutex::new(HashSet::new()));
+    let batch_info = Arc::new(Mutex::new(Vec::new()));
+    let vertices_done = Arc::new(Mutex::new(false));
+
+    let received_vertices_clone = received_vertices.clone();
+    let received_edges_clone = received_edges.clone();
+    let batch_info_clone = batch_info.clone();
+    let vertices_done_clone = vertices_done.clone();
+
+    // Load the graph
+    loader
+        .do_load(move |batch| {
+            let mut batch_info = batch_info_clone.lock().unwrap();
+            let mut received_v = received_vertices_clone.lock().unwrap();
+            let mut received_e = received_edges_clone.lock().unwrap();
+            let mut v_done = vertices_done_clone.lock().unwrap();
+
+            // Record batch information
+            let batch_desc = (batch.vertex_ids.len(), batch.edge_from_ids.len());
+            batch_info.push(batch_desc);
+
+            // Collect vertices
+            for v_id in &batch.vertex_ids {
+                let id_str = String::from_utf8(v_id.clone()).unwrap();
+                received_v.insert(id_str);
+
+                // If we're seeing edges, vertices should be done
+                if !batch.edge_from_ids.is_empty() {
+                    *v_done = true;
+                }
+            }
+
+            // Collect edges
+            for (from_id, to_id) in batch.edge_from_ids.iter().zip(batch.edge_to_ids.iter()) {
+                let from_str = String::from_utf8(from_id.clone()).unwrap();
+                let to_str = String::from_utf8(to_id.clone()).unwrap();
+                let edge_str = format!("{}-->{}", from_str, to_str);
+                received_e.insert(edge_str);
+            }
+
+            // Verify no attributes - when empty, vectors should be truly empty to save memory
+            assert_eq!(
+                batch.vertex_attributes.len(),
+                0,
+                "Expected empty vertex_attributes vector when no attributes requested"
+            );
+
+            assert_eq!(
+                batch.edge_attributes.len(),
+                0,
+                "Expected empty edge_attributes vector when no attributes requested"
+            );
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    // Verify results (scope the locks to drop before await)
+    {
+        let received_v = received_vertices.lock().unwrap();
+        let received_e = received_edges.lock().unwrap();
+        let batch_info = batch_info.lock().unwrap();
+        let v_done = vertices_done.lock().unwrap();
+
+        // Check counts
+        assert_eq!(
+            received_v.len(),
+            total_vertices,
+            "Expected {} vertices, got {}",
+            total_vertices,
+            received_v.len()
+        );
+        assert_eq!(
+            received_e.len(),
+            total_edges,
+            "Expected {} edges, got {}",
+            total_edges,
+            received_e.len()
+        );
+
+        // Verify batching occurred (with batch_size=100, we should have multiple batches)
+        assert!(
+            batch_info.len() > 1,
+            "Expected multiple batches, got {}",
+            batch_info.len()
+        );
+
+        // Verify vertices came before edges (once edges start, no more vertices)
+        assert!(!*v_done, "Expected all vertices before edges");
+    }
+
+    teardown().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn test_aql_graph_loader_filtered_with_depth() {
+    // Create binary tree of depth 10
+    create_binary_tree_graph(10).await;
+
+    let db_config = build_db_config();
+    let batch_size = 100;
+
+    // Expected counts for depth <= 5
+    // Vertices: sum from depth 0 to 5 = 2^6 - 1 = 63 vertices
+    let expected_vertices = 63;
+    // Edges: 62 (all except root has parent)
+    let expected_edges = 62;
+
+    // Build AQL queries with depth filter
+    let vertex_query = AqlQuery::new(
+        format!(
+            "FOR v IN {} FILTER v.depth <= 5 RETURN {{vertices: [{{_id: v._id, depth: v.depth}}]}}",
+            VERTEX_COLLECTION
+        ),
+        HashMap::new(),
+    );
+
+    let edge_query = AqlQuery::new(
+        format!(
+            "FOR e IN {} FILTER e.depth <= 5 RETURN {{edges: [{{_from: e._from, _to: e._to, depth: e.depth}}]}}",
+            EDGE_COLLECTION
+        ),
+        HashMap::new(),
+    );
+
+    // Create loader with depth attribute
+    let loader = AqlGraphLoader::new(
+        db_config,
+        batch_size,
+        vec![DataItem::new("depth".to_string(), DataType::U64)],
+        vec![DataItem::new("depth".to_string(), DataType::U64)],
+        vec![vec![vertex_query], vec![edge_query]],
+    )
+    .await
+    .unwrap();
+
+    // Track what we've received
+    let received_vertices = Arc::new(Mutex::new(Vec::new()));
+    let received_edges = Arc::new(Mutex::new(Vec::new()));
+    let batch_count = Arc::new(Mutex::new(0));
+
+    let received_vertices_clone = received_vertices.clone();
+    let received_edges_clone = received_edges.clone();
+    let batch_count_clone = batch_count.clone();
+
+    // Load the graph
+    loader
+        .do_load(move |batch| {
+            let mut batch_count = batch_count_clone.lock().unwrap();
+            *batch_count += 1;
+
+            let mut received_v = received_vertices_clone.lock().unwrap();
+            let mut received_e = received_edges_clone.lock().unwrap();
+
+            // Collect vertices with depth
+            for (v_id, attrs) in batch.vertex_ids.iter().zip(batch.vertex_attributes.iter()) {
+                let id_str = String::from_utf8(v_id.clone()).unwrap();
+                assert_eq!(attrs.len(), 1, "Expected 1 vertex attribute");
+                let depth = attrs[0].as_u64().unwrap();
+                assert!(depth <= 5, "Vertex depth {} exceeds filter", depth);
+                received_v.push((id_str, depth));
+            }
+
+            // Collect edges with depth
+            for ((from_id, to_id), attrs) in batch
+                .edge_from_ids
+                .iter()
+                .zip(batch.edge_to_ids.iter())
+                .zip(batch.edge_attributes.iter())
+            {
+                let from_str = String::from_utf8(from_id.clone()).unwrap();
+                let to_str = String::from_utf8(to_id.clone()).unwrap();
+                assert_eq!(attrs.len(), 1, "Expected 1 edge attribute");
+                let edge_depth = attrs[0].as_u64().unwrap();
+                assert!(edge_depth <= 5, "Edge depth {} exceeds filter", edge_depth);
+
+                // Verify edge depth matches target vertex depth
+                // Extract target vertex key
+                let to_key = to_str
+                    .split('/')
+                    .next_back()
+                    .unwrap()
+                    .parse::<usize>()
+                    .unwrap();
+                let expected_depth = if to_key == 0 {
+                    0
+                } else {
+                    (to_key + 1).ilog2() as u64
+                };
+                assert_eq!(
+                    edge_depth, expected_depth,
+                    "Edge depth {} doesn't match target vertex depth {}",
+                    edge_depth, expected_depth
+                );
+
+                received_e.push((from_str, to_str, edge_depth));
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    // Verify results (scope the locks to drop before await)
+    {
+        let received_v = received_vertices.lock().unwrap();
+        let received_e = received_edges.lock().unwrap();
+        let batch_count = batch_count.lock().unwrap();
+
+        // Check counts
+        assert_eq!(
+            received_v.len(),
+            expected_vertices,
+            "Expected {} vertices, got {}",
+            expected_vertices,
+            received_v.len()
+        );
+        assert_eq!(
+            received_e.len(),
+            expected_edges,
+            "Expected {} edges, got {}",
+            expected_edges,
+            received_e.len()
+        );
+
+        // With 63 items, batch size 100, should fit in a single batch (or very few)
+        assert!(
+            *batch_count <= 2,
+            "Expected single batch or very few, got {}",
+            *batch_count
+        );
+
+        // Verify all vertex depths are <= 5
+        for (_, depth) in received_v.iter() {
+            assert!(*depth <= 5);
+        }
+
+        // Verify all edge depths are <= 5
+        for (_, _, depth) in received_e.iter() {
+            assert!(*depth <= 5);
+        }
+    }
+
+    teardown().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn test_aql_graph_loader_left_edges_only() {
+    // Create binary tree of depth 10
+    create_binary_tree_graph(10).await;
+
+    let db_config = build_db_config();
+    let batch_size = 100;
+
+    // Expected counts
+    let total_vertices = (1 << 11) - 1; // 2047 vertices
+    // For left edges only: each level except leaves has left children
+    // In a complete binary tree of depth 10, we have 11 levels (0-10)
+    // Each level i (0 <= i < 10) has 2^i vertices, each with a left child
+    // Total left edges: sum of 2^i for i=0 to 9 = 2^10 - 1 = 1023
+    let expected_left_edges = 1023;
+
+    // Build AQL queries
+    let vertex_query = AqlQuery::new(
+        format!(
+            "FOR v IN {} RETURN {{vertices: [{{_id: v._id, depth: v.depth}}]}}",
+            VERTEX_COLLECTION
+        ),
+        HashMap::new(),
+    );
+
+    let edge_query = AqlQuery::new(
+        format!(
+            "FOR e IN {} FILTER e.type == 'left' RETURN {{edges: [{{_from: e._from, _to: e._to, depth: e.depth}}]}}",
+            EDGE_COLLECTION
+        ),
+        HashMap::new(),
+    );
+
+    // Create loader with depth attribute (not type)
+    let loader = AqlGraphLoader::new(
+        db_config,
+        batch_size,
+        vec![DataItem::new("depth".to_string(), DataType::U64)],
+        vec![DataItem::new("depth".to_string(), DataType::U64)],
+        vec![vec![vertex_query, edge_query]],
+    )
+    .await
+    .unwrap();
+
+    // Track what we've received
+    let received_vertices = Arc::new(Mutex::new(HashMap::new()));
+    let received_edges = Arc::new(Mutex::new(Vec::new()));
+
+    let received_vertices_clone = received_vertices.clone();
+    let received_edges_clone = received_edges.clone();
+
+    // Load the graph
+    loader
+        .do_load(move |batch| {
+            let mut received_v = received_vertices_clone.lock().unwrap();
+            let mut received_e = received_edges_clone.lock().unwrap();
+
+            // Collect vertices with depth
+            for (v_id, attrs) in batch.vertex_ids.iter().zip(batch.vertex_attributes.iter()) {
+                let id_str = String::from_utf8(v_id.clone()).unwrap();
+                assert_eq!(attrs.len(), 1, "Expected 1 vertex attribute");
+                let depth = attrs[0].as_u64().unwrap();
+                received_v.insert(id_str, depth);
+            }
+
+            // Collect edges with depth (type attribute not fetched)
+            for ((from_id, to_id), attrs) in batch
+                .edge_from_ids
+                .iter()
+                .zip(batch.edge_to_ids.iter())
+                .zip(batch.edge_attributes.iter())
+            {
+                let from_str = String::from_utf8(from_id.clone()).unwrap();
+                let to_str = String::from_utf8(to_id.clone()).unwrap();
+                assert_eq!(attrs.len(), 1, "Expected 1 edge attribute (depth only)");
+                let edge_depth = attrs[0].as_u64().unwrap();
+                received_e.push((from_str.clone(), to_str.clone(), edge_depth));
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    // Verify results (scope the locks to drop before await)
+    {
+        let received_v = received_vertices.lock().unwrap();
+        let received_e = received_edges.lock().unwrap();
+
+        // Check counts
+        assert_eq!(
+            received_v.len(),
+            total_vertices,
+            "Expected {} vertices, got {}",
+            total_vertices,
+            received_v.len()
+        );
+        assert_eq!(
+            received_e.len(),
+            expected_left_edges,
+            "Expected {} left edges, got {}",
+            expected_left_edges,
+            received_e.len()
+        );
+
+        // Verify structure: each edge should be from parent to left child
+        for (from_str, to_str, edge_depth) in received_e.iter() {
+            let from_key = from_str
+                .split('/')
+                .next_back()
+                .unwrap()
+                .parse::<usize>()
+                .unwrap();
+            let to_key = to_str
+                .split('/')
+                .next_back()
+                .unwrap()
+                .parse::<usize>()
+                .unwrap();
+
+            // Left child relationship: to_key = 2 * from_key + 1
+            assert_eq!(
+                to_key,
+                2 * from_key + 1,
+                "Edge {}-->{} is not a left child edge",
+                from_str,
+                to_str
+            );
+
+            // Verify edge depth matches target vertex depth
+            let target_depth = received_v.get(to_str).unwrap();
+            assert_eq!(
+                edge_depth, target_depth,
+                "Edge depth {} doesn't match target vertex depth {}",
+                edge_depth, target_depth
+            );
+        }
+    }
+
+    teardown().await;
 }

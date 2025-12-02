@@ -423,13 +423,14 @@ impl AqlGraphLoader {
                     continue;
                 }
 
-                // Process each item in the result
+                // Create a single batch for this database response
+                let mut batch = GraphBatch::new();
+
+                // Process each item in the result array and accumulate into the batch
                 for item in result_array.unwrap() {
                     let graph_data: serde_json::Result<GraphData> =
                         serde_json::from_value(item.clone());
                     if let Ok(graph_data) = graph_data {
-                        let mut batch = GraphBatch::new();
-
                         // Extract and validate vertices
                         if let Some(vertices) = graph_data.vertices {
                             for vertex in vertices {
@@ -438,30 +439,32 @@ impl AqlGraphLoader {
                                 {
                                     batch.vertex_ids.push(id_str.as_bytes().to_vec());
 
-                                    // Extract and validate attributes
-                                    let mut attrs = Vec::new();
-                                    for attr_def in &vertex_attributes {
-                                        let raw_value = vertex
-                                            .get(&attr_def.name)
-                                            .cloned()
-                                            .unwrap_or(Value::Null);
+                                    // Extract and validate attributes only if there are any
+                                    if !vertex_attributes.is_empty() {
+                                        let mut attrs = Vec::new();
+                                        for attr_def in &vertex_attributes {
+                                            let raw_value = vertex
+                                                .get(&attr_def.name)
+                                                .cloned()
+                                                .unwrap_or(Value::Null);
 
-                                        match convert_and_validate(
-                                            &raw_value,
-                                            &attr_def.data_type,
-                                            &attr_def.name,
-                                            id_str,
-                                        ) {
-                                            Ok(converted) => attrs.push(converted),
-                                            Err(err_msg) => {
-                                                batch.add_type_error(err_msg);
-                                                attrs.push(default_value_for_type(
-                                                    &attr_def.data_type,
-                                                ));
+                                            match convert_and_validate(
+                                                &raw_value,
+                                                &attr_def.data_type,
+                                                &attr_def.name,
+                                                id_str,
+                                            ) {
+                                                Ok(converted) => attrs.push(converted),
+                                                Err(err_msg) => {
+                                                    batch.add_type_error(err_msg);
+                                                    attrs.push(default_value_for_type(
+                                                        &attr_def.data_type,
+                                                    ));
+                                                }
                                             }
                                         }
+                                        batch.vertex_attributes.push(attrs);
                                     }
-                                    batch.vertex_attributes.push(attrs);
                                 }
                             }
                         }
@@ -482,38 +485,40 @@ impl AqlGraphLoader {
                                     batch.edge_from_ids.push(from_str.as_bytes().to_vec());
                                     batch.edge_to_ids.push(to_str.as_bytes().to_vec());
 
-                                    // Extract and validate attributes
-                                    let mut attrs = Vec::new();
-                                    for attr_def in &edge_attributes {
-                                        let raw_value = edge
-                                            .get(&attr_def.name)
-                                            .cloned()
-                                            .unwrap_or(Value::Null);
+                                    // Extract and validate attributes only if there are any
+                                    if !edge_attributes.is_empty() {
+                                        let mut attrs = Vec::new();
+                                        for attr_def in &edge_attributes {
+                                            let raw_value = edge
+                                                .get(&attr_def.name)
+                                                .cloned()
+                                                .unwrap_or(Value::Null);
 
-                                        match convert_and_validate(
-                                            &raw_value,
-                                            &attr_def.data_type,
-                                            &attr_def.name,
-                                            &edge_id,
-                                        ) {
-                                            Ok(converted) => attrs.push(converted),
-                                            Err(err_msg) => {
-                                                batch.add_type_error(err_msg);
-                                                attrs.push(default_value_for_type(
-                                                    &attr_def.data_type,
-                                                ));
+                                            match convert_and_validate(
+                                                &raw_value,
+                                                &attr_def.data_type,
+                                                &attr_def.name,
+                                                &edge_id,
+                                            ) {
+                                                Ok(converted) => attrs.push(converted),
+                                                Err(err_msg) => {
+                                                    batch.add_type_error(err_msg);
+                                                    attrs.push(default_value_for_type(
+                                                        &attr_def.data_type,
+                                                    ));
+                                                }
                                             }
                                         }
+                                        batch.edge_attributes.push(attrs);
                                     }
-                                    batch.edge_attributes.push(attrs);
                                 }
                             }
                         }
-
-                        // Call the callback with the batch
-                        callback_clone(&mut batch)?;
                     }
                 }
+
+                // Call the callback once with the accumulated batch from this database response
+                callback_clone(&mut batch)?;
             }
             Ok(())
         });
