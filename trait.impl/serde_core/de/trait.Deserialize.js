@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["arangors_graph_exporter",[["impl&lt;'de&gt; <a class=\"trait\" href=\"https://docs.rs/serde_core/1.0.228/serde_core/de/trait.Deserialize.html\" title=\"trait serde_core::de::Deserialize\">Deserialize</a>&lt;'de&gt; for <a class=\"enum\" href=\"arangors_graph_exporter/types/info/enum.DeploymentType.html\" title=\"enum arangors_graph_exporter::types::info::DeploymentType\">DeploymentType</a>"],["impl&lt;'de&gt; <a class=\"trait\" href=\"https://docs.rs/serde_core/1.0.228/serde_core/de/trait.Deserialize.html\" title=\"trait serde_core::de::Deserialize\">Deserialize</a>&lt;'de&gt; for <a class=\"struct\" href=\"arangors_graph_exporter/types/info/struct.DeploymentInfo.html\" title=\"struct arangors_graph_exporter::types::info::DeploymentInfo\">DeploymentInfo</a>"],["impl&lt;'de&gt; <a class=\"trait\" href=\"https://docs.rs/serde_core/1.0.228/serde_core/de/trait.Deserialize.html\" title=\"trait serde_core::de::Deserialize\">Deserialize</a>&lt;'de&gt; for <a class=\"struct\" href=\"arangors_graph_exporter/types/info/struct.SupportInfo.html\" title=\"struct arangors_graph_exporter::types::info::SupportInfo\">SupportInfo</a>"],["impl&lt;'de&gt; <a class=\"trait\" href=\"https://docs.rs/serde_core/1.0.228/serde_core/de/trait.Deserialize.html\" title=\"trait serde_core::de::Deserialize\">Deserialize</a>&lt;'de&gt; for <a class=\"struct\" href=\"arangors_graph_exporter/types/info/struct.VersionInformation.html\" title=\"struct arangors_graph_exporter::types::info::VersionInformation\">VersionInformation</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1526]}
