@@ -33,7 +33,7 @@ fn get_db_url() -> String {
     }
 
     let protocol = if is_ssl_enabled() { "https" } else { "http" };
-    format!("{}://localhost:8529", protocol)
+    format!("{}://172.28.0.1:8529", protocol)
 }
 
 // Helper to create an HTTP client for test setup
