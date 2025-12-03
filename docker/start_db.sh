@@ -1,17 +1,16 @@
 #!/bin/bash
 
 # Configuration environment variables:
-#   STARTER_MODE:             (single|cluster|activefailover), default single
-#   DOCKER_IMAGE:             ArangoDB docker image, default docker.io/arangodb/arangodb:latest
+#   STARTER_MODE:             (single|cluster), default single
+#   DOCKER_IMAGE:             ArangoDB docker image, default docker.io/arangodb/enterprise:latest
 #   SSL:                      (true|false), default false
 #   DATABASE_EXTENDED_NAMES:  (true|false), default false
-#   ARANGO_LICENSE_KEY:       only required for ArangoDB Enterprise
 
 # EXAMPLE:
 # STARTER_MODE=cluster SSL=true ./start_db.sh
 
 STARTER_MODE=${STARTER_MODE:=single}
-DOCKER_IMAGE=${DOCKER_IMAGE:=docker.io/arangodb/arangodb:latest}
+DOCKER_IMAGE=${DOCKER_IMAGE:=docker.io/arangodb/enterprise:latest}
 SSL=${SSL:=false}
 DATABASE_EXTENDED_NAMES=${DATABASE_EXTENDED_NAMES:=false}
 
@@ -45,7 +44,7 @@ if [ "$STARTER_MODE" == "single" ]; then
 fi
 
 if [ "$SSL" == "true" ]; then
-    STARTER_ARGS="$STARTER_ARGS --ssl.keyfile=server.pem"
+    STARTER_ARGS="$STARTER_ARGS --ssl.keyfile=/cfg/server.pem"
     SCHEME=https
     ARANGOSH_SCHEME=http+ssl
 fi
@@ -65,7 +64,6 @@ docker run -d \
     --volumes-from configs \
     $MOUNT_DATA \
     -v /var/run/docker.sock:/var/run/docker.sock \
-    -e ARANGO_LICENSE_KEY="$ARANGO_LICENSE_KEY" \
     $STARTER_DOCKER_IMAGE \
     $STARTER_ARGS \
     --docker.container=adb \
@@ -73,7 +71,7 @@ docker run -d \
     --starter.address="${GW}" \
     --docker.image="${DOCKER_IMAGE}" \
     --args.all.query.require-with="true" \
-    --starter.local --starter.mode=${STARTER_MODE} --all.log.level=debug --all.log.output=+ --log.verbose
+    --starter.local=true --starter.mode=${STARTER_MODE} --args.all.log.level=debug --args.all.log.output=+ --log.verbose
 
 
 wait_server() {
@@ -112,8 +110,3 @@ for a in ${COORDINATORS[*]} ; do
     echo ""
 done
 
-if [ "$STARTER_MODE" == "activefailover" ]; then
-  LEADER=$("$LOCATION"/find_active_endpoint.sh)
-  echo "Leader: $SCHEME://$LEADER"
-  echo ""
-fi

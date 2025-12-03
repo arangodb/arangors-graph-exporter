@@ -1,16 +1,13 @@
-use arangors::graph::{EdgeDefinition, Graph};
-use arangors::Connection;
 use arangors_graph_exporter::{
     CollectionInfo, DataLoadConfiguration, DataLoadConfigurationBuilder, DatabaseConfiguration,
     DatabaseConfigurationBuilder, GraphLoader,
 };
 use serial_test::serial;
 
-use arangors::connection::Version;
-use arangors::document::options::InsertOptions;
+use arangors_graph_exporter::client::config::ClientConfig;
 use arangors_graph_exporter::errors::GraphLoaderError;
 use rstest::fixture;
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::env;
 
 static GRAPH: &str = "IntegrationTestGraph";
@@ -19,19 +16,51 @@ static VERTEX_COLLECTION: &str = "IntegrationTestVertex";
 static USERNAME: &str = "root";
 static PASSWORD: &str = "test";
 static DATABASE: &str = "_system";
-static DATABASE_URL: &str = "http://localhost:8529";
+
+fn is_ssl_enabled() -> bool {
+    env::var("SSL")
+        .unwrap_or_else(|_| "FALSE".to_string())
+        .to_uppercase()
+        == "TRUE"
+}
 
 fn get_db_url() -> String {
-    env::var("ARANGODB_DB_URL").unwrap_or_else(|_| DATABASE_URL.to_string())
+    if let Ok(url) = env::var("ARANGODB_DB_URL") {
+        return url;
+    }
+
+    let protocol = if is_ssl_enabled() { "https" } else { "http" };
+    format!("{}://172.28.0.1:8529", protocol)
+}
+
+// Helper to create an HTTP client for test setup
+fn build_test_client() -> reqwest_middleware::ClientWithMiddleware {
+    let db_config = build_db_config();
+    let use_tls = db_config.endpoints[0].starts_with("https://");
+    let client_config = ClientConfig::builder()
+        .n_retries(3)
+        .use_tls(use_tls)
+        .tls_cert_opt(db_config.tls_cert.clone())
+        .build();
+    arangors_graph_exporter::client::build_client(&client_config).unwrap()
 }
 
 fn build_db_config() -> DatabaseConfiguration {
     let endpoints = vec![get_db_url()];
-    let db_config_builder = DatabaseConfigurationBuilder::new()
+    let mut db_config_builder = DatabaseConfigurationBuilder::new()
         .endpoints(endpoints)
         .username(USERNAME.to_string())
         .password(PASSWORD.to_string())
         .database(DATABASE.to_string());
+
+    // Add TLS certificate if SSL is enabled and a certificate path is provided
+    // If no certificate is provided, the client will accept self-signed certificates
+    if is_ssl_enabled() && env::var("TLS_CERT_PATH").is_ok() {
+        db_config_builder = db_config_builder.tls_cert(env::var("TLS_CERT_PATH").unwrap());
+    }
+    // If TLS_CERT_PATH is not set, no certificate is added,
+    // and danger_accept_invalid_certs will be used
+
     db_config_builder.build()
 }
 
@@ -55,23 +84,47 @@ fn build_load_config_with_v_with_e(
 }
 
 async fn is_cluster() -> bool {
-    let conn = Connection::establish_basic_auth(DATABASE_URL, USERNAME, PASSWORD)
+    let db_config = build_db_config();
+    let client = build_test_client();
+
+    let url = format!("{}/_admin/server/role", db_config.endpoints[0]);
+    let resp = client
+        .get(&url)
+        .basic_auth(USERNAME, Some(PASSWORD))
+        .send()
         .await
         .unwrap();
-    let info = conn.into_admin().await;
-    let role = info.unwrap().server_role().await.unwrap();
-    if role == "COORDINATOR" {
-        return true;
-    }
-    false
+
+    let json: Value = resp.json().await.unwrap();
+    json["role"].as_str().unwrap_or("") == "COORDINATOR"
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
+struct Version {
+    pub version: String,
+    pub license: String,
+    pub server: String,
 }
 
 async fn get_arangodb_version() -> Version {
-    let conn = Connection::establish_basic_auth(DATABASE_URL, USERNAME, PASSWORD)
+    let db_config = build_db_config();
+    let client = build_test_client();
+
+    let url = format!("{}/_api/version", db_config.endpoints[0]);
+    let resp = client
+        .get(&url)
+        .basic_auth(USERNAME, Some(PASSWORD))
+        .send()
         .await
         .unwrap();
-    let db = conn.db(DATABASE).await.unwrap();
-    db.arango_version().await.unwrap()
+
+    let json: Value = resp.json().await.unwrap();
+    Version {
+        version: json["version"].as_str().unwrap().to_string(),
+        license: json["license"].as_str().unwrap().to_string(),
+        server: json["server"].as_str().unwrap().to_string(),
+    }
 }
 
 fn extract_version_parts(version: &str) -> Result<(u32, u32, u32), &'static str> {
@@ -98,70 +151,105 @@ fn extract_version_parts(version: &str) -> Result<(u32, u32, u32), &'static str>
 }
 
 async fn create_graph(insert_data: bool) {
-    let conn = Connection::establish_basic_auth(DATABASE_URL, USERNAME, PASSWORD)
+    let db_config = build_db_config();
+    let client = build_test_client();
+
+    // Drop graph if exists
+    let drop_url = format!("{}/_api/gharial/{}", db_config.endpoints[0], GRAPH);
+    let _ = client
+        .delete(&drop_url)
+        .basic_auth(USERNAME, Some(PASSWORD))
+        .query(&[("dropCollections", "true")])
+        .send()
+        .await;
+
+    // Create graph
+    let create_graph_body = json!({
+        "name": GRAPH,
+        "edgeDefinitions": [{
+            "collection": EDGE_COLLECTION,
+            "from": [VERTEX_COLLECTION],
+            "to": [VERTEX_COLLECTION]
+        }],
+        "orphanCollections": []
+    });
+
+    let create_url = format!("{}/_api/gharial", db_config.endpoints[0]);
+    let resp = client
+        .post(&create_url)
+        .basic_auth(USERNAME, Some(PASSWORD))
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(&create_graph_body).unwrap())
+        .send()
         .await
         .unwrap();
 
-    let edge_definition = EdgeDefinition {
-        collection: EDGE_COLLECTION.to_string(),
-        from: vec![VERTEX_COLLECTION.to_string()],
-        to: vec![VERTEX_COLLECTION.to_string()],
-    };
-    let graph = Graph::builder()
-        .name(GRAPH.to_string())
-        .edge_definitions(vec![edge_definition])
-        .orphan_collections(vec![])
-        .build();
-
-    let db = conn.db(DATABASE).await.unwrap();
-    let _ = db.drop_graph(GRAPH, true).await;
-    let graph_res = db.create_graph(graph, false).await;
-    assert!(graph_res.is_ok());
+    assert!(
+        resp.status().is_success(),
+        "Failed to create graph: status={}",
+        resp.status()
+    );
 
     if insert_data {
-        // creates a "line" graph with 10 vertices and 9 edges
-        // x,y,z attributes will be inserted to both vertex and edge collections
-        let vertex_collection = db.collection(VERTEX_COLLECTION).await.unwrap();
-        let edge_collection = db.collection(EDGE_COLLECTION).await.unwrap();
-
-        let insert_options = InsertOptions::builder().overwrite(true).build();
+        // Insert vertices
+        let vertex_url = format!(
+            "{}/_api/document/{}",
+            db_config.endpoints[0], VERTEX_COLLECTION
+        );
         for i in 0..10 {
-            let key_string = i.to_string();
-            vertex_collection
-                .create_document(
-                    serde_json::json!({"_key": key_string, "x": i + 1, "y": i + 2, "z": i + 3}),
-                    insert_options.clone(),
-                )
+            let doc = json!({
+                "_key": i.to_string(),
+                "x": i + 1,
+                "y": i + 2,
+                "z": i + 3
+            });
+            client
+                .post(&vertex_url)
+                .basic_auth(USERNAME, Some(PASSWORD))
+                .header("Content-Type", "application/json")
+                .body(serde_json::to_string(&doc).unwrap())
+                .send()
                 .await
                 .unwrap();
         }
 
+        // Insert edges
+        let edge_url = format!(
+            "{}/_api/document/{}",
+            db_config.endpoints[0], EDGE_COLLECTION
+        );
         for i in 0..9 {
-            let from_id = VERTEX_COLLECTION.to_string() + "/" + &i.to_string();
-            let to_id = VERTEX_COLLECTION.to_string() + "/" + &(i + 1).to_string();
-            let key = i.to_string();
-            edge_collection
-                .create_document(
-                    serde_json::json!({"_from": from_id, "_to": to_id, "_key": key, "x": i + 1, "y": i + 2, "z": i + 3}),
-                    insert_options.clone(),
-                )
+            let doc = json!({
+                "_key": i.to_string(),
+                "_from": format!("{}/{}", VERTEX_COLLECTION, i),
+                "_to": format!("{}/{}", VERTEX_COLLECTION, i + 1),
+                "x": i + 1,
+                "y": i + 2,
+                "z": i + 3
+            });
+            client
+                .post(&edge_url)
+                .basic_auth(USERNAME, Some(PASSWORD))
+                .header("Content-Type", "application/json")
+                .body(serde_json::to_string(&doc).unwrap())
+                .send()
                 .await
                 .unwrap();
         }
-        let properties_v = vertex_collection.document_count().await.unwrap();
-        assert_eq!(properties_v.info.count, Some(10));
-        let properties_e = edge_collection.document_count().await.unwrap();
-        assert_eq!(properties_e.info.count, Some(9));
     }
 }
 
 async fn drop_graph() {
-    let conn = Connection::establish_basic_auth(DATABASE_URL, USERNAME, PASSWORD)
-        .await
-        .unwrap();
+    let db_config = build_db_config();
+    let client = build_test_client();
 
-    let db = conn.db(DATABASE).await.unwrap();
-    let _ = db.drop_graph(GRAPH, true).await;
+    let drop_url = format!("{}/_api/gharial/{}", db_config.endpoints[0], GRAPH);
+    let _ = client
+        .delete(&drop_url)
+        .basic_auth(USERNAME, Some(PASSWORD))
+        .query(&[("dropCollections", "true")])
+        .send()
+        .await;
 }
 
 async fn setup(insert_data: bool) {
@@ -214,7 +302,7 @@ async fn init_named_graph_loader_with_data() {
         assert_eq!(vertex_ids.len(), 10);
 
         assert_eq!(columns.len(), 10);
-        for (_v_index, vertex) in columns.iter().enumerate() {
+        for vertex in columns.iter() {
             assert_eq!(vertex.len(), 0);
             assert_eq!(vertex.len(), vertex_field_names.len());
         }
@@ -255,7 +343,7 @@ async fn init_named_graph_loader_with_data() {
     teardown().await;
 }
 
-fn get_attribute_position_from_fields(field_names: &Vec<String>, attribute: &str) -> usize {
+fn get_attribute_position_from_fields(field_names: &[String], attribute: &str) -> usize {
     assert!(!field_names.is_empty());
     assert!(field_names.contains(&attribute.to_string()));
     field_names.iter().position(|x| x == attribute).unwrap()
@@ -426,7 +514,7 @@ async fn init_named_graph_loader_with_data_all_v_and_e_collection_name_attribute
             assert_eq!(id, expected_id);
         }
 
-        for (_v_index, vertex) in columns.iter().enumerate() {
+        for vertex in columns.iter() {
             assert_eq!(vertex.len(), 1);
             assert_eq!(vertex.len(), vertex_field_names.len());
 
@@ -473,7 +561,7 @@ async fn init_named_graph_loader_with_data_all_v_and_e_collection_name_attribute
             assert_eq!(to_id_str, format!("{}/{}", VERTEX_COLLECTION, e_index + 1));
         }
 
-        for (_e_index, edge) in columns.iter().enumerate() {
+        for edge in columns.iter() {
             assert_eq!(edge.len(), 1);
             assert_eq!(edge_field_names.len(), 1);
 
@@ -821,22 +909,20 @@ async fn init_empty_custom_graph_loader() {
                 Err(GraphLoaderError::Other(ref msg))
                     if msg.contains("No vertex collections given!") =>
                 {
-                    assert!(true)
+                    // Expected error
                 }
-                _ => assert!(false),
+                _ => panic!("Expected GraphLoaderError::Other with 'No vertex collections given!'"),
             }
         }
+    } else if major > 3 || (major == 3 && minor >= 12) {
+        // single server dump endpoint only supported from 3.12
+        // all versions below will fall back to aql.
+        // uses dump endpoint, must fail
+        assert!(vertices_result.is_err());
     } else {
-        if major > 3 || (major == 3 && minor >= 12) {
-            // single server dump endpoint only supported from 3.12
-            // all versions below will fall back to aql.
-            // uses dump endpoint, must fail
-            assert!(vertices_result.is_err());
-        } else {
-            // In the SingleServer case we do not have an error as we execute AQL on empty collections.
-            // Means we're just not receiving any documents.
-            assert!(vertices_result.is_ok());
-        }
+        // In the SingleServer case we do not have an error as we execute AQL on empty collections.
+        // Means we're just not receiving any documents.
+        assert!(vertices_result.is_ok());
     }
 
     let handle_edges = move |_from_ids: &Vec<Vec<u8>>,
@@ -852,20 +938,18 @@ async fn init_empty_custom_graph_loader() {
                 Err(GraphLoaderError::Other(ref msg))
                     if msg.contains("No edge collections given!") =>
                 {
-                    assert!(true)
+                    // Expected error
                 }
-                _ => assert!(false),
+                _ => panic!("Expected GraphLoaderError::Other with 'No edge collections given!'"),
             }
         }
+    } else if major > 3 || (major == 3 && minor >= 12) {
+        // uses dump endpoint, must fail
+        assert!(edges_result.is_err());
     } else {
-        if major > 3 || (major == 3 && minor >= 12) {
-            // uses dump endpoint, must fail
-            assert!(vertices_result.is_err());
-        } else {
-            // In the SingleServer case we do not have an error as we execute AQL on empty collections.
-            // Means we're just not receiving any documents.
-            assert!(vertices_result.is_ok());
-        }
+        // In the SingleServer case we do not have an error as we execute AQL on empty collections.
+        // Means we're just not receiving any documents.
+        assert!(edges_result.is_ok());
     }
     if let Err(ref e) = edges_result {
         println!("{:?}", e);

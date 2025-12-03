@@ -4,7 +4,7 @@ use crate::client::{build_client, make_url};
 use crate::errors::GraphLoaderError;
 use crate::request::handle_arangodb_response;
 use crate::types::info::DeploymentType;
-use crate::{errors, DataLoadConfiguration, DatabaseConfiguration};
+use crate::{DataLoadConfiguration, DatabaseConfiguration, errors};
 use bytes::Bytes;
 use log::{debug, error};
 use reqwest::StatusCode;
@@ -125,13 +125,13 @@ pub(crate) async fn get_all_shard_data(
         }
         let r = r.unwrap();
         let headers = r.headers();
-        if let Some(id) = headers.get("X-Arango-Dump-Id") {
-            if let Ok(id) = id.to_str() {
-                dbservers.push(DBServerInfo {
-                    dbserver: server.clone(),
-                    dump_id: id.to_owned(),
-                });
-            }
+        if let Some(id) = headers.get("X-Arango-Dump-Id")
+            && let Ok(id) = id.to_str()
+        {
+            dbservers.push(DBServerInfo {
+                dbserver: server.clone(),
+                dump_id: id.to_owned(),
+            });
         }
         debug!("Started dbserver {}", server);
     }
@@ -190,8 +190,7 @@ pub(crate) async fn get_all_shard_data(
         return Err(GraphLoaderError::NoDatabaseServers);
     }
 
-    let par_per_dbserver =
-        (load_config.parallelism as usize + dbservers.len() - 1) / dbservers.len();
+    let par_per_dbserver = (load_config.parallelism as usize).div_ceil(dbservers.len());
     let mut task_set = JoinSet::new();
     let mut endpoints_round_robin: usize = 0;
     let mut consumers_round_robin: usize = 0;
