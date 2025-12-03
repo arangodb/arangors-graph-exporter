@@ -945,11 +945,11 @@ async fn init_empty_custom_graph_loader() {
         }
     } else if major > 3 || (major == 3 && minor >= 12) {
         // uses dump endpoint, must fail
-        assert!(vertices_result.is_err());
+        assert!(edges_result.is_err());
     } else {
         // In the SingleServer case we do not have an error as we execute AQL on empty collections.
         // Means we're just not receiving any documents.
-        assert!(vertices_result.is_ok());
+        assert!(edges_result.is_ok());
     }
     if let Err(ref e) = edges_result {
         println!("{:?}", e);
