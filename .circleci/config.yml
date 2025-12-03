@@ -91,7 +91,7 @@ jobs:
             if [[ "<< parameters.db-ssl >>" == "true" ]]; then
               echo 'export SSL=true' >> $BASH_ENV
             else
-              echo 'export SSL=true' >> $BASH_ENV
+              echo 'export SSL=false' >> $BASH_ENV
             fi
       - run:
           name: Start Database
