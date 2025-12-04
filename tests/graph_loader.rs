@@ -1,3 +1,5 @@
+mod helpers;
+
 use arangors_graph_exporter::{
     CollectionInfo, DataLoadConfiguration, DataLoadConfigurationBuilder, DatabaseConfiguration,
     DatabaseConfigurationBuilder, GraphLoader,
@@ -8,7 +10,7 @@ use arangors_graph_exporter::aql_graph_loader::{AqlGraphLoader, AqlQuery, DataIt
 use arangors_graph_exporter::client::config::ClientConfig;
 use arangors_graph_exporter::errors::GraphLoaderError;
 use rstest::fixture;
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::sync::{Arc, Mutex};
@@ -157,89 +159,17 @@ async fn create_graph(insert_data: bool) {
     let db_config = build_db_config();
     let client = build_test_client();
 
-    // Drop graph if exists
-    let drop_url = format!("{}/_api/gharial/{}", db_config.endpoints[0], GRAPH);
-    let _ = client
-        .delete(&drop_url)
-        .basic_auth(USERNAME, Some(PASSWORD))
-        .query(&[("dropCollections", "true")])
-        .send()
-        .await;
+    let config = helpers::graph_setup::GraphConfig {
+        db_endpoint: &db_config.endpoints[0],
+        username: USERNAME,
+        password: PASSWORD,
+        graph_name: GRAPH,
+        vertex_collection: VERTEX_COLLECTION,
+        edge_collection: EDGE_COLLECTION,
+        client: &client,
+    };
 
-    // Create graph
-    let create_graph_body = json!({
-        "name": GRAPH,
-        "edgeDefinitions": [{
-            "collection": EDGE_COLLECTION,
-            "from": [VERTEX_COLLECTION],
-            "to": [VERTEX_COLLECTION]
-        }],
-        "orphanCollections": []
-    });
-
-    let create_url = format!("{}/_api/gharial", db_config.endpoints[0]);
-    let resp = client
-        .post(&create_url)
-        .basic_auth(USERNAME, Some(PASSWORD))
-        .header("Content-Type", "application/json")
-        .body(serde_json::to_string(&create_graph_body).unwrap())
-        .send()
-        .await
-        .unwrap();
-
-    assert!(
-        resp.status().is_success(),
-        "Failed to create graph: status={}",
-        resp.status()
-    );
-
-    if insert_data {
-        // Insert vertices
-        let vertex_url = format!(
-            "{}/_api/document/{}",
-            db_config.endpoints[0], VERTEX_COLLECTION
-        );
-        for i in 0..10 {
-            let doc = json!({
-                "_key": i.to_string(),
-                "x": i + 1,
-                "y": i + 2,
-                "z": i + 3
-            });
-            client
-                .post(&vertex_url)
-                .basic_auth(USERNAME, Some(PASSWORD))
-                .header("Content-Type", "application/json")
-                .body(serde_json::to_string(&doc).unwrap())
-                .send()
-                .await
-                .unwrap();
-        }
-
-        // Insert edges
-        let edge_url = format!(
-            "{}/_api/document/{}",
-            db_config.endpoints[0], EDGE_COLLECTION
-        );
-        for i in 0..9 {
-            let doc = json!({
-                "_key": i.to_string(),
-                "_from": format!("{}/{}", VERTEX_COLLECTION, i),
-                "_to": format!("{}/{}", VERTEX_COLLECTION, i + 1),
-                "x": i + 1,
-                "y": i + 2,
-                "z": i + 3
-            });
-            client
-                .post(&edge_url)
-                .basic_auth(USERNAME, Some(PASSWORD))
-                .header("Content-Type", "application/json")
-                .body(serde_json::to_string(&doc).unwrap())
-                .send()
-                .await
-                .unwrap();
-        }
-    }
+    helpers::graph_setup::create_graph(config, insert_data).await;
 }
 
 async fn drop_graph() {
@@ -998,127 +928,17 @@ async fn create_binary_tree_graph(depth: usize) {
     let db_config = build_db_config();
     let client = build_test_client();
 
-    // Drop graph if exists
-    let drop_url = format!("{}/_api/gharial/{}", db_config.endpoints[0], GRAPH);
-    let _ = client
-        .delete(&drop_url)
-        .basic_auth(USERNAME, Some(PASSWORD))
-        .query(&[("dropCollections", "true")])
-        .send()
-        .await;
+    let config = helpers::graph_setup::GraphConfig {
+        db_endpoint: &db_config.endpoints[0],
+        username: USERNAME,
+        password: PASSWORD,
+        graph_name: GRAPH,
+        vertex_collection: VERTEX_COLLECTION,
+        edge_collection: EDGE_COLLECTION,
+        client: &client,
+    };
 
-    // Create graph
-    let create_graph_body = json!({
-        "name": GRAPH,
-        "edgeDefinitions": [{
-            "collection": EDGE_COLLECTION,
-            "from": [VERTEX_COLLECTION],
-            "to": [VERTEX_COLLECTION]
-        }],
-        "orphanCollections": []
-    });
-
-    let create_url = format!("{}/_api/gharial", db_config.endpoints[0]);
-    let resp = client
-        .post(&create_url)
-        .basic_auth(USERNAME, Some(PASSWORD))
-        .header("Content-Type", "application/json")
-        .body(serde_json::to_string(&create_graph_body).unwrap())
-        .send()
-        .await
-        .unwrap();
-
-    assert!(
-        resp.status().is_success(),
-        "Failed to create graph: status={}",
-        resp.status()
-    );
-
-    // Calculate total number of vertices in a complete binary tree
-    // Formula: 2^(depth+1) - 1
-    let total_vertices = (1 << (depth + 1)) - 1;
-
-    // Insert vertices with depth attribute
-    let vertex_url = format!(
-        "{}/_api/document/{}",
-        db_config.endpoints[0], VERTEX_COLLECTION
-    );
-
-    for i in 0..total_vertices {
-        // Calculate depth: floor(log2(i+1))
-        let vertex_depth = if i == 0 {
-            0
-        } else {
-            ((i + 1) as u32).ilog2() as u64
-        };
-
-        let doc = json!({
-            "_key": i.to_string(),
-            "depth": vertex_depth
-        });
-        client
-            .post(&vertex_url)
-            .basic_auth(USERNAME, Some(PASSWORD))
-            .header("Content-Type", "application/json")
-            .body(serde_json::to_string(&doc).unwrap())
-            .send()
-            .await
-            .unwrap();
-    }
-
-    // Insert edges
-    let edge_url = format!(
-        "{}/_api/document/{}",
-        db_config.endpoints[0], EDGE_COLLECTION
-    );
-
-    let mut edge_key = 0;
-    for i in 0..total_vertices {
-        let left_child = 2 * i + 1;
-        let right_child = 2 * i + 2;
-
-        // Add left child edge if it exists
-        if left_child < total_vertices {
-            let child_depth = ((left_child + 1) as u32).ilog2() as u64;
-            let doc = json!({
-                "_key": edge_key.to_string(),
-                "_from": format!("{}/{}", VERTEX_COLLECTION, i),
-                "_to": format!("{}/{}", VERTEX_COLLECTION, left_child),
-                "depth": child_depth,
-                "type": "left"
-            });
-            client
-                .post(&edge_url)
-                .basic_auth(USERNAME, Some(PASSWORD))
-                .header("Content-Type", "application/json")
-                .body(serde_json::to_string(&doc).unwrap())
-                .send()
-                .await
-                .unwrap();
-            edge_key += 1;
-        }
-
-        // Add right child edge if it exists
-        if right_child < total_vertices {
-            let child_depth = ((right_child + 1) as u32).ilog2() as u64;
-            let doc = json!({
-                "_key": edge_key.to_string(),
-                "_from": format!("{}/{}", VERTEX_COLLECTION, i),
-                "_to": format!("{}/{}", VERTEX_COLLECTION, right_child),
-                "depth": child_depth,
-                "type": "right"
-            });
-            client
-                .post(&edge_url)
-                .basic_auth(USERNAME, Some(PASSWORD))
-                .header("Content-Type", "application/json")
-                .body(serde_json::to_string(&doc).unwrap())
-                .send()
-                .await
-                .unwrap();
-            edge_key += 1;
-        }
-    }
+    helpers::graph_setup::create_binary_tree_graph(config, depth).await;
 }
 
 #[tokio::test]

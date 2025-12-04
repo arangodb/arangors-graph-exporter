@@ -614,11 +614,11 @@ impl AqlGraphLoader {
 
         let response = cursor_create_resp?;
         if !response.status().is_success() {
+            let status = response.status();
             let body = response.text().await.unwrap_or_default();
             return Err(GraphLoaderError::Other(format!(
                 "Cursor creation failed with status {}: {}",
-                response.status(),
-                body
+                status, body
             )));
         }
 
