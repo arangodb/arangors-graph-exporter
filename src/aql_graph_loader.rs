@@ -217,29 +217,31 @@ fn convert_and_validate(
             }
         }
         DataType::F64 => {
-            if let Some(f) = value.as_f64() {
-                Ok(Value::Number(
-                    serde_json::Number::from_f64(f).unwrap_or_else(|| 0.into()),
-                ))
-            } else if let Some(n) = value.as_i64() {
-                Ok(Value::Number(
-                    serde_json::Number::from_f64(n as f64).unwrap_or_else(|| 0.into()),
-                ))
-            } else if let Some(n) = value.as_u64() {
-                Ok(Value::Number(
-                    serde_json::Number::from_f64(n as f64).unwrap_or_else(|| 0.into()),
-                ))
-            } else if let Some(s) = value.as_str() {
-                s.parse::<f64>()
-                    .map(|f| {
-                        Value::Number(serde_json::Number::from_f64(f).unwrap_or_else(|| 0.into()))
-                    })
-                    .map_err(|_| {
+            let make_number = |raw: f64| {
+                serde_json::Number::from_f64(raw)
+                    .map(Value::Number)
+                    .ok_or_else(|| {
                         format!(
-                            "Cannot parse '{}' as f64 for attribute '{}' in entity '{}'",
-                            s, attr_name, entity_id
+                            "Cannot represent '{}' as finite f64 for attribute '{}' in entity '{}'",
+                            raw, attr_name, entity_id
                         )
                     })
+            };
+
+            if let Some(f) = value.as_f64() {
+                make_number(f)
+            } else if let Some(n) = value.as_i64() {
+                make_number(n as f64)
+            } else if let Some(n) = value.as_u64() {
+                make_number(n as f64)
+            } else if let Some(s) = value.as_str() {
+                let parsed = s.parse::<f64>().map_err(|_| {
+                    format!(
+                        "Cannot parse '{}' as f64 for attribute '{}' in entity '{}'",
+                        s, attr_name, entity_id
+                    )
+                })?;
+                make_number(parsed)
             } else {
                 Err(format!(
                     "Cannot convert {:?} to f64 for attribute '{}' in entity '{}'",
