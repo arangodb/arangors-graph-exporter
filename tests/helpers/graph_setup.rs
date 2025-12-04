@@ -52,53 +52,59 @@ pub async fn create_graph(config: GraphConfig<'_>, insert_data: bool) {
     );
 
     if insert_data {
-        // Insert vertices
+        // Insert vertices in batch
         let vertex_url = format!(
             "{}/_api/document/{}",
             config.db_endpoint, config.vertex_collection
         );
-        for i in 0..10 {
-            let doc = json!({
-                "_key": i.to_string(),
-                "x": i + 1,
-                "y": i + 2,
-                "z": i + 3
-            });
-            config
-                .client
-                .post(&vertex_url)
-                .basic_auth(config.username, Some(config.password))
-                .header("Content-Type", "application/json")
-                .body(serde_json::to_string(&doc).unwrap())
-                .send()
-                .await
-                .unwrap();
-        }
+        let vertices: Vec<_> = (0..10)
+            .map(|i| {
+                json!({
+                    "_key": i.to_string(),
+                    "x": i + 1,
+                    "y": i + 2,
+                    "z": i + 3
+                })
+            })
+            .collect();
 
-        // Insert edges
+        config
+            .client
+            .post(&vertex_url)
+            .basic_auth(config.username, Some(config.password))
+            .header("Content-Type", "application/json")
+            .body(serde_json::to_string(&vertices).unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        // Insert edges in batch
         let edge_url = format!(
             "{}/_api/document/{}",
             config.db_endpoint, config.edge_collection
         );
-        for i in 0..9 {
-            let doc = json!({
-                "_key": i.to_string(),
-                "_from": format!("{}/{}", config.vertex_collection, i),
-                "_to": format!("{}/{}", config.vertex_collection, i + 1),
-                "x": i + 1,
-                "y": i + 2,
-                "z": i + 3
-            });
-            config
-                .client
-                .post(&edge_url)
-                .basic_auth(config.username, Some(config.password))
-                .header("Content-Type", "application/json")
-                .body(serde_json::to_string(&doc).unwrap())
-                .send()
-                .await
-                .unwrap();
-        }
+        let edges: Vec<_> = (0..9)
+            .map(|i| {
+                json!({
+                    "_key": i.to_string(),
+                    "_from": format!("{}/{}", config.vertex_collection, i),
+                    "_to": format!("{}/{}", config.vertex_collection, i + 1),
+                    "x": i + 1,
+                    "y": i + 2,
+                    "z": i + 3
+                })
+            })
+            .collect();
+
+        config
+            .client
+            .post(&edge_url)
+            .basic_auth(config.username, Some(config.password))
+            .header("Content-Type", "application/json")
+            .body(serde_json::to_string(&edges).unwrap())
+            .send()
+            .await
+            .unwrap();
     }
 }
 
@@ -146,42 +152,43 @@ pub async fn create_binary_tree_graph(config: GraphConfig<'_>, depth: usize) {
     // Formula: 2^(depth+1) - 1
     let total_vertices = (1 << (depth + 1)) - 1;
 
-    // Insert vertices with depth attribute
+    // Prepare all vertices
+    let vertices: Vec<_> = (0..total_vertices)
+        .map(|i| {
+            // Calculate depth: floor(log2(i+1))
+            let vertex_depth = if i == 0 {
+                0
+            } else {
+                ((i + 1) as u32).ilog2() as u64
+            };
+
+            json!({
+                "_key": i.to_string(),
+                "depth": vertex_depth
+            })
+        })
+        .collect();
+
+    // Insert all vertices in batch
     let vertex_url = format!(
         "{}/_api/document/{}",
         config.db_endpoint, config.vertex_collection
     );
 
-    for i in 0..total_vertices {
-        // Calculate depth: floor(log2(i+1))
-        let vertex_depth = if i == 0 {
-            0
-        } else {
-            ((i + 1) as u32).ilog2() as u64
-        };
+    config
+        .client
+        .post(&vertex_url)
+        .basic_auth(config.username, Some(config.password))
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(&vertices).unwrap())
+        .send()
+        .await
+        .unwrap();
 
-        let doc = json!({
-            "_key": i.to_string(),
-            "depth": vertex_depth
-        });
-        config
-            .client
-            .post(&vertex_url)
-            .basic_auth(config.username, Some(config.password))
-            .header("Content-Type", "application/json")
-            .body(serde_json::to_string(&doc).unwrap())
-            .send()
-            .await
-            .unwrap();
-    }
-
-    // Insert edges
-    let edge_url = format!(
-        "{}/_api/document/{}",
-        config.db_endpoint, config.edge_collection
-    );
-
+    // Prepare all edges
+    let mut edges = Vec::new();
     let mut edge_key = 0;
+
     for i in 0..total_vertices {
         let left_child = 2 * i + 1;
         let right_child = 2 * i + 2;
@@ -189,45 +196,43 @@ pub async fn create_binary_tree_graph(config: GraphConfig<'_>, depth: usize) {
         // Add left child edge if it exists
         if left_child < total_vertices {
             let child_depth = ((left_child + 1) as u32).ilog2() as u64;
-            let doc = json!({
+            edges.push(json!({
                 "_key": edge_key.to_string(),
                 "_from": format!("{}/{}", config.vertex_collection, i),
                 "_to": format!("{}/{}", config.vertex_collection, left_child),
                 "depth": child_depth,
                 "type": "left"
-            });
-            config
-                .client
-                .post(&edge_url)
-                .basic_auth(config.username, Some(config.password))
-                .header("Content-Type", "application/json")
-                .body(serde_json::to_string(&doc).unwrap())
-                .send()
-                .await
-                .unwrap();
+            }));
             edge_key += 1;
         }
 
         // Add right child edge if it exists
         if right_child < total_vertices {
             let child_depth = ((right_child + 1) as u32).ilog2() as u64;
-            let doc = json!({
+            edges.push(json!({
                 "_key": edge_key.to_string(),
                 "_from": format!("{}/{}", config.vertex_collection, i),
                 "_to": format!("{}/{}", config.vertex_collection, right_child),
                 "depth": child_depth,
                 "type": "right"
-            });
-            config
-                .client
-                .post(&edge_url)
-                .basic_auth(config.username, Some(config.password))
-                .header("Content-Type", "application/json")
-                .body(serde_json::to_string(&doc).unwrap())
-                .send()
-                .await
-                .unwrap();
+            }));
             edge_key += 1;
         }
     }
+
+    // Insert all edges in batch
+    let edge_url = format!(
+        "{}/_api/document/{}",
+        config.db_endpoint, config.edge_collection
+    );
+
+    config
+        .client
+        .post(&edge_url)
+        .basic_auth(config.username, Some(config.password))
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(&edges).unwrap())
+        .send()
+        .await
+        .unwrap();
 }
