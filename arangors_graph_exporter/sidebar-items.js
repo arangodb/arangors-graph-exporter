@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["client","config","errors","graph_loader","load","request","types"]};
+window.SIDEBAR_ITEMS = {"mod":["aql_graph_loader","client","config","errors","graph_loader","load","request","types"]};
