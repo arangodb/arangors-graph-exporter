@@ -11,8 +11,8 @@ pub struct GraphConfig<'a> {
     pub client: &'a reqwest_middleware::ClientWithMiddleware,
 }
 
-/// Creates a simple test graph with optional test data
-pub async fn create_graph(config: GraphConfig<'_>, insert_data: bool) {
+/// Helper function to drop and create a graph with the given configuration
+async fn drop_and_create_graph(config: &GraphConfig<'_>) {
     // Drop graph if exists
     let drop_url = format!("{}/_api/gharial/{}", config.db_endpoint, config.graph_name);
     let _ = config
@@ -50,6 +50,11 @@ pub async fn create_graph(config: GraphConfig<'_>, insert_data: bool) {
         "Failed to create graph: status={}",
         resp.status()
     );
+}
+
+/// Creates a simple test graph with optional test data
+pub async fn create_graph(config: GraphConfig<'_>, insert_data: bool) {
+    drop_and_create_graph(&config).await;
 
     if insert_data {
         // Insert vertices in batch
@@ -122,43 +127,7 @@ pub async fn create_graph(config: GraphConfig<'_>, insert_data: bool) {
 
 /// Creates a binary tree graph of the specified depth
 pub async fn create_binary_tree_graph(config: GraphConfig<'_>, depth: usize) {
-    // Drop graph if exists
-    let drop_url = format!("{}/_api/gharial/{}", config.db_endpoint, config.graph_name);
-    let _ = config
-        .client
-        .delete(&drop_url)
-        .basic_auth(config.username, Some(config.password))
-        .query(&[("dropCollections", "true")])
-        .send()
-        .await;
-
-    // Create graph
-    let create_graph_body = json!({
-        "name": config.graph_name,
-        "edgeDefinitions": [{
-            "collection": config.edge_collection,
-            "from": [config.vertex_collection],
-            "to": [config.vertex_collection]
-        }],
-        "orphanCollections": []
-    });
-
-    let create_url = format!("{}/_api/gharial", config.db_endpoint);
-    let resp = config
-        .client
-        .post(&create_url)
-        .basic_auth(config.username, Some(config.password))
-        .header("Content-Type", "application/json")
-        .body(serde_json::to_string(&create_graph_body).unwrap())
-        .send()
-        .await
-        .unwrap();
-
-    assert!(
-        resp.status().is_success(),
-        "Failed to create graph: status={}",
-        resp.status()
-    );
+    drop_and_create_graph(&config).await;
 
     // Calculate total number of vertices in a complete binary tree
     // Formula: 2^(depth+1) - 1
