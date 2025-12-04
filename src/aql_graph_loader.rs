@@ -184,7 +184,15 @@ fn convert_and_validate(
                     ))
                 }
             } else if let Some(f) = value.as_f64() {
-                if f >= i64::MIN as f64 && f <= i64::MAX as f64 {
+                // Note that floating point values whose absolute value
+                // is way larger than 2^53 are integers anyway, so every
+                // f64 value which is greater or equal to 2^63 and
+                // strictly smaller than 2^63 can be cast faithfully
+                // to i64. Since NaN values and infinities are not
+                // between -2^63 and 2^63, and since the `round` call
+                // cannot bring us close to absolutele value 2^63, the
+                // following code is correct:
+                if f >= -(2.0_f64.powi(63)) && f < 2.0_f64.powi(63) {
                     Ok(Value::Number((f.round() as i64).into()))
                 } else {
                     Err(format!(
