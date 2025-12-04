@@ -1,4 +1,4 @@
-:use arangors_graph_exporter::{
+use arangors_graph_exporter::{
     CollectionInfo, DataLoadConfiguration, DataLoadConfigurationBuilder, DatabaseConfiguration,
     DatabaseConfigurationBuilder, GraphLoader,
 };
@@ -1166,12 +1166,14 @@ async fn test_aql_graph_loader_full_topology() {
     let received_vertices = Arc::new(Mutex::new(HashSet::new()));
     let received_edges = Arc::new(Mutex::new(HashSet::new()));
     let batch_info = Arc::new(Mutex::new(Vec::new()));
-    let vertices_done = Arc::new(Mutex::new(false));
+    let edges_seen = Arc::new(Mutex::new(false));
+    let vertices_after_edges_error = Arc::new(Mutex::new(false));
 
     let received_vertices_clone = received_vertices.clone();
     let received_edges_clone = received_edges.clone();
     let batch_info_clone = batch_info.clone();
-    let vertices_done_clone = vertices_done.clone();
+    let edges_seen_clone = edges_seen.clone();
+    let vertices_after_edges_error_clone = vertices_after_edges_error.clone();
 
     // Load the graph
     loader
@@ -1179,7 +1181,8 @@ async fn test_aql_graph_loader_full_topology() {
             let mut batch_info = batch_info_clone.lock().unwrap();
             let mut received_v = received_vertices_clone.lock().unwrap();
             let mut received_e = received_edges_clone.lock().unwrap();
-            let mut v_done = vertices_done_clone.lock().unwrap();
+            let mut edges_seen_flag = edges_seen_clone.lock().unwrap();
+            let mut vertices_after_edges_flag = vertices_after_edges_error_clone.lock().unwrap();
 
             // Record batch information
             let batch_desc = (batch.vertex_ids.len(), batch.edge_from_ids.len());
@@ -1189,11 +1192,11 @@ async fn test_aql_graph_loader_full_topology() {
             for v_id in &batch.vertex_ids {
                 let id_str = String::from_utf8(v_id.clone()).unwrap();
                 received_v.insert(id_str);
+            }
 
-                // If we're seeing edges, vertices should be done
-                if !batch.edge_from_ids.is_empty() {
-                    *v_done = true;
-                }
+            // Check if vertices appeared after edges were seen in previous batches
+            if !batch.vertex_ids.is_empty() && *edges_seen_flag {
+                *vertices_after_edges_flag = true;
             }
 
             // Collect edges
@@ -1202,6 +1205,11 @@ async fn test_aql_graph_loader_full_topology() {
                 let to_str = String::from_utf8(to_id.clone()).unwrap();
                 let edge_str = format!("{}-->{}", from_str, to_str);
                 received_e.insert(edge_str);
+            }
+
+            // Mark that we've seen edges
+            if !batch.edge_from_ids.is_empty() {
+                *edges_seen_flag = true;
             }
 
             // Verify no attributes - when empty, vectors should be truly empty to save memory
@@ -1227,7 +1235,7 @@ async fn test_aql_graph_loader_full_topology() {
         let received_v = received_vertices.lock().unwrap();
         let received_e = received_edges.lock().unwrap();
         let batch_info = batch_info.lock().unwrap();
-        let v_done = vertices_done.lock().unwrap();
+        let vertices_after_edges_flag = vertices_after_edges_error.lock().unwrap();
 
         // Check counts
         assert_eq!(
@@ -1253,7 +1261,10 @@ async fn test_aql_graph_loader_full_topology() {
         );
 
         // Verify vertices came before edges (once edges start, no more vertices)
-        assert!(!*v_done, "Expected all vertices before edges");
+        assert!(
+            !*vertices_after_edges_flag,
+            "Vertices appeared after edges were already seen in previous batches"
+        );
     }
 
     teardown().await;
@@ -1321,7 +1332,11 @@ async fn test_aql_graph_loader_filtered_with_depth() {
             let mut received_e = received_edges_clone.lock().unwrap();
 
             // Collect vertices with depth
-            for (v_id, attrs) in batch.vertex_ids.iter().zip(batch.vertex_attribute_values.iter()) {
+            for (v_id, attrs) in batch
+                .vertex_ids
+                .iter()
+                .zip(batch.vertex_attribute_values.iter())
+            {
                 let id_str = String::from_utf8(v_id.clone()).unwrap();
                 assert_eq!(attrs.len(), 1, "Expected 1 vertex attribute");
                 let depth = attrs[0].as_u64().unwrap();
@@ -1471,7 +1486,11 @@ async fn test_aql_graph_loader_left_edges_only() {
             let mut received_e = received_edges_clone.lock().unwrap();
 
             // Collect vertices with depth
-            for (v_id, attrs) in batch.vertex_ids.iter().zip(batch.vertex_attribute_values.iter()) {
+            for (v_id, attrs) in batch
+                .vertex_ids
+                .iter()
+                .zip(batch.vertex_attribute_values.iter())
+            {
                 let id_str = String::from_utf8(v_id.clone()).unwrap();
                 assert_eq!(attrs.len(), 1, "Expected 1 vertex attribute");
                 let depth = attrs[0].as_u64().unwrap();
@@ -1685,7 +1704,10 @@ async fn test_aql_graph_loader_traversal_depth_6() {
             received_e.len()
         );
 
-        // Verify we got exactly 2 batches as expected
+        // Verify we got exactly 2 batches as expected, we asked for a batch size of 100
+        // and know that 128 pairs will come (one edge will be `null`), therefore we insist
+        // here on exactly two batches. If the behaviour of the AQL engine changes, we
+        // want to be alerted here!
         assert_eq!(*batch_count, 2, "Expected 2 batches, got {}", *batch_count);
 
         // Verify vertices and edges arrive together

@@ -101,7 +101,7 @@ fn convert_and_validate(
             } else if let Some(n) = value.as_u64() {
                 Ok(Value::Bool(n != 0))
             } else if let Some(n) = value.as_f64() {
-                Ok(Value::Bool(n != 0.0))
+                Ok(Value::Bool(n != 0.0 && n != -0.0))
             } else {
                 Err(format!(
                     "Cannot convert {:?} to bool for attribute '{}' in entity '{}'",
@@ -140,7 +140,14 @@ fn convert_and_validate(
                     ))
                 }
             } else if let Some(f) = value.as_f64() {
-                if f >= 0.0 && f <= u64::MAX as f64 {
+                // Note that floating point values which are way larger than 2^53 are integers
+                // anyway, so every f64 value which is strictly smaller than 2^64 can be cast
+                // faithfully to u64. Since Rust 1.45 the behaviour above that is "saturating",
+                // so that the result of a cast is u64::MAX for f64 values >= 2^64, however,
+                // this is not a faithfull representation of the number.
+                // Since NaN values and infinities are not between 0.0 and 2^64, and since
+                // the `round` call cannot bring us close to 2^64, the following code is correct:
+                if f >= 0.0 && f < 2.0_f64.powi(64) {
                     Ok(Value::Number((f.round() as u64).into()))
                 } else {
                     Err(format!(
@@ -606,6 +613,15 @@ impl AqlGraphLoader {
             .await;
 
         let response = cursor_create_resp?;
+        if !response.status().is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(GraphLoaderError::Other(format!(
+                "Cursor creation failed with status {}: {}",
+                response.status(),
+                body
+            )));
+        }
+
         let bytes_res = response
             .bytes()
             .await
@@ -650,7 +666,7 @@ impl AqlGraphLoader {
                 }
             }
 
-            // Clean up cursor
+            // Clean up cursor, ignore result since cursors are cleaned up automatically
             let delete_url = make_cursor_url(&format!("/{}", cursor_id));
             let _ = handle_auth(client.delete(delete_url), db_config)
                 .send()

@@ -239,7 +239,10 @@ async fn create_aql_graph_loader() -> Result<AqlGraphLoader, GraphLoaderError> {
 For graph traversals that produce vertices and edges together:
 
 ```rust
-use arangors_graph_exporter::{AqlGraphLoader, AqlQuery, DataItem, DataType};
+use arangors_graph_exporter::{AqlGraphLoader, AqlQuery, DatabaseConfiguration, DataItem, DataType, GraphLoaderError};
+use std::collections::HashMap;
+use serde_json::Value;
+
 
 async fn create_traversal_loader() -> Result<AqlGraphLoader, GraphLoaderError> {
     let db_config = DatabaseConfiguration::new(/* parameters */);
