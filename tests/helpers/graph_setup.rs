@@ -68,7 +68,7 @@ pub async fn create_graph(config: GraphConfig<'_>, insert_data: bool) {
             })
             .collect();
 
-        config
+        let resp = config
             .client
             .post(&vertex_url)
             .basic_auth(config.username, Some(config.password))
@@ -77,6 +77,12 @@ pub async fn create_graph(config: GraphConfig<'_>, insert_data: bool) {
             .send()
             .await
             .unwrap();
+
+        assert!(
+            resp.status().is_success(),
+            "Failed to insert vertices: status={}",
+            resp.status()
+        );
 
         // Insert edges in batch
         let edge_url = format!(
@@ -96,7 +102,7 @@ pub async fn create_graph(config: GraphConfig<'_>, insert_data: bool) {
             })
             .collect();
 
-        config
+        let resp = config
             .client
             .post(&edge_url)
             .basic_auth(config.username, Some(config.password))
@@ -105,6 +111,12 @@ pub async fn create_graph(config: GraphConfig<'_>, insert_data: bool) {
             .send()
             .await
             .unwrap();
+
+        assert!(
+            resp.status().is_success(),
+            "Failed to insert edges: status={}",
+            resp.status()
+        );
     }
 }
 
