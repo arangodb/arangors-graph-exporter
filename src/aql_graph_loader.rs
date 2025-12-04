@@ -35,13 +35,13 @@ pub struct GraphBatch {
     /// Vertex IDs as byte vectors
     pub vertex_ids: Vec<Vec<u8>>,
     /// Vertex attributes, parallel to vertex_ids
-    pub vertex_attributes: Vec<Vec<Value>>,
+    pub vertex_attribute_values: Vec<Vec<Value>>,
     /// Edge source IDs as byte vectors
     pub edge_from_ids: Vec<Vec<u8>>,
     /// Edge target IDs as byte vectors
     pub edge_to_ids: Vec<Vec<u8>>,
     /// Edge attributes, parallel to edge_from_ids/edge_to_ids
-    pub edge_attributes: Vec<Vec<Value>>,
+    pub edge_attribute_values: Vec<Vec<Value>>,
     /// Total number of type conversion errors encountered
     pub type_error_count: usize,
     /// First few type error messages (up to 10)
@@ -58,10 +58,10 @@ impl GraphBatch {
     fn new() -> Self {
         GraphBatch {
             vertex_ids: Vec::new(),
-            vertex_attributes: Vec::new(),
+            vertex_attribute_values: Vec::new(),
             edge_from_ids: Vec::new(),
             edge_to_ids: Vec::new(),
-            edge_attributes: Vec::new(),
+            edge_attribute_values: Vec::new(),
             type_error_count: 0,
             type_error_messages: Vec::new(),
         }
@@ -463,7 +463,7 @@ impl AqlGraphLoader {
                                                 }
                                             }
                                         }
-                                        batch.vertex_attributes.push(attrs);
+                                        batch.vertex_attribute_values.push(attrs);
                                     }
                                 }
                             }
@@ -509,7 +509,7 @@ impl AqlGraphLoader {
                                                 }
                                             }
                                         }
-                                        batch.edge_attributes.push(attrs);
+                                        batch.edge_attribute_values.push(attrs);
                                     }
                                 }
                             }

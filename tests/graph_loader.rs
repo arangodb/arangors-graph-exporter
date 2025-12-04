@@ -1,4 +1,4 @@
-use arangors_graph_exporter::{
+:use arangors_graph_exporter::{
     CollectionInfo, DataLoadConfiguration, DataLoadConfigurationBuilder, DatabaseConfiguration,
     DatabaseConfigurationBuilder, GraphLoader,
 };
@@ -1206,13 +1206,13 @@ async fn test_aql_graph_loader_full_topology() {
 
             // Verify no attributes - when empty, vectors should be truly empty to save memory
             assert_eq!(
-                batch.vertex_attributes.len(),
+                batch.vertex_attribute_values.len(),
                 0,
                 "Expected empty vertex_attributes vector when no attributes requested"
             );
 
             assert_eq!(
-                batch.edge_attributes.len(),
+                batch.edge_attribute_values.len(),
                 0,
                 "Expected empty edge_attributes vector when no attributes requested"
             );
@@ -1321,7 +1321,7 @@ async fn test_aql_graph_loader_filtered_with_depth() {
             let mut received_e = received_edges_clone.lock().unwrap();
 
             // Collect vertices with depth
-            for (v_id, attrs) in batch.vertex_ids.iter().zip(batch.vertex_attributes.iter()) {
+            for (v_id, attrs) in batch.vertex_ids.iter().zip(batch.vertex_attribute_values.iter()) {
                 let id_str = String::from_utf8(v_id.clone()).unwrap();
                 assert_eq!(attrs.len(), 1, "Expected 1 vertex attribute");
                 let depth = attrs[0].as_u64().unwrap();
@@ -1334,7 +1334,7 @@ async fn test_aql_graph_loader_filtered_with_depth() {
                 .edge_from_ids
                 .iter()
                 .zip(batch.edge_to_ids.iter())
-                .zip(batch.edge_attributes.iter())
+                .zip(batch.edge_attribute_values.iter())
             {
                 let from_str = String::from_utf8(from_id.clone()).unwrap();
                 let to_str = String::from_utf8(to_id.clone()).unwrap();
@@ -1471,7 +1471,7 @@ async fn test_aql_graph_loader_left_edges_only() {
             let mut received_e = received_edges_clone.lock().unwrap();
 
             // Collect vertices with depth
-            for (v_id, attrs) in batch.vertex_ids.iter().zip(batch.vertex_attributes.iter()) {
+            for (v_id, attrs) in batch.vertex_ids.iter().zip(batch.vertex_attribute_values.iter()) {
                 let id_str = String::from_utf8(v_id.clone()).unwrap();
                 assert_eq!(attrs.len(), 1, "Expected 1 vertex attribute");
                 let depth = attrs[0].as_u64().unwrap();
@@ -1483,7 +1483,7 @@ async fn test_aql_graph_loader_left_edges_only() {
                 .edge_from_ids
                 .iter()
                 .zip(batch.edge_to_ids.iter())
-                .zip(batch.edge_attributes.iter())
+                .zip(batch.edge_attribute_values.iter())
             {
                 let from_str = String::from_utf8(from_id.clone()).unwrap();
                 let to_str = String::from_utf8(to_id.clone()).unwrap();
@@ -1624,7 +1624,7 @@ async fn test_aql_graph_loader_traversal_depth_6() {
 
             // Verify no vertex attributes
             assert_eq!(
-                batch.vertex_attributes.len(),
+                batch.vertex_attribute_values.len(),
                 0,
                 "Expected no vertex attributes"
             );
@@ -1634,7 +1634,7 @@ async fn test_aql_graph_loader_traversal_depth_6() {
                 .edge_from_ids
                 .iter()
                 .zip(batch.edge_to_ids.iter())
-                .zip(batch.edge_attributes.iter())
+                .zip(batch.edge_attribute_values.iter())
             {
                 let from_str = String::from_utf8(from_id.clone()).unwrap();
                 let to_str = String::from_utf8(to_id.clone()).unwrap();

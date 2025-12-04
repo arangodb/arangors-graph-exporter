@@ -311,10 +311,10 @@ Once the AQL graph loader is initialized, load the graph data using the `do_load
 The callback receives a mutable reference to a `GraphBatch` containing both vertices and edges. The batch structure includes:
 
 - **vertex_ids**: Vector of vertex IDs as byte vectors
-- **vertex_attributes**: Vector of attribute vectors, parallel to vertex_ids
+- **vertex_attribute_values**: Vector of attribute vectors, parallel to vertex_ids
 - **edge_from_ids**: Vector of source vertex IDs as byte vectors
 - **edge_to_ids**: Vector of target vertex IDs as byte vectors
-- **edge_attributes**: Vector of attribute vectors, parallel to edge IDs
+- **edge_attribute_values**: Vector of attribute vectors, parallel to edge IDs
 - **type_error_count**: Total number of type conversion errors encountered
 - **type_error_messages**: First few type error messages (up to 10)
 
@@ -334,9 +334,9 @@ aql_loader.do_load(|batch: &mut GraphBatch| {
     // Process vertices
     for (i, vertex_id) in batch.vertex_ids.iter().enumerate() {
         let id_str = String::from_utf8(vertex_id.clone()).unwrap();
-        let attributes = &batch.vertex_attributes[i];
+        let attribute_values = &batch.vertex_attribute_values[i];
         
-        println!("Vertex {}: {:?}", id_str, attributes);
+        println!("Vertex {}: {:?}", id_str, attribute_values);
         // Process vertex...
     }
     
@@ -344,9 +344,9 @@ aql_loader.do_load(|batch: &mut GraphBatch| {
     for (i, from_id) in batch.edge_from_ids.iter().enumerate() {
         let from_str = String::from_utf8(from_id.clone()).unwrap();
         let to_str = String::from_utf8(batch.edge_to_ids[i].clone()).unwrap();
-        let attributes = &batch.edge_attributes[i];
+        let attribute_values = &batch.edge_attribute_values[i];
         
-        println!("Edge {} -> {}: {:?}", from_str, to_str, attributes);
+        println!("Edge {} -> {}: {:?}", from_str, to_str, attribute_values);
         // Process edge...
     }
     
@@ -383,7 +383,7 @@ aql_loader.do_load(move |batch: &mut GraphBatch| {
     // Collect vertices
     for (i, vertex_id) in batch.vertex_ids.iter().enumerate() {
         let id_str = String::from_utf8(vertex_id.clone()).unwrap();
-        let attrs = batch.vertex_attributes[i].clone();
+        let attrs = batch.vertex_attribute_values[i].clone();
         v_map.insert(id_str, attrs);
     }
     
@@ -391,7 +391,7 @@ aql_loader.do_load(move |batch: &mut GraphBatch| {
     for (i, from_id) in batch.edge_from_ids.iter().enumerate() {
         let from_str = String::from_utf8(from_id.clone()).unwrap();
         let to_str = String::from_utf8(batch.edge_to_ids[i].clone()).unwrap();
-        let attrs = batch.edge_attributes[i].clone();
+        let attrs = batch.edge_attribute_values[i].clone();
         e_vec.push((from_str, to_str, attrs));
     }
     
@@ -409,7 +409,7 @@ println!("Loaded {} vertices and {} edges", final_vertices.len(), final_edges.le
 - The callback is called multiple times as batches are loaded (batch size is configured during initialization)
 - Vertices and edges may arrive in the same batch (especially for traversal queries)
 - The callback must be `Send + Sync + Clone` to support parallel query execution
-- Attributes in `vertex_attributes` and `edge_attributes` correspond to the `DataItem` specifications provided during initialization
+- Attributes in `vertex_attribute_values` and `edge_attribute_values` correspond to the `DataItem` specifications provided during initialization
 - Type conversion errors are collected but don't stop the loading process; check `type_error_count` to handle them appropriately
 
 ## Configuration
