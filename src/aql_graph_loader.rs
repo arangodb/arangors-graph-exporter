@@ -340,7 +340,7 @@ struct GraphData {
 
 impl AqlGraphLoader {
     /// Create a new AQL graph loader
-    pub async fn new(
+    pub fn new(
         db_config: DatabaseConfiguration,
         batch_size: u64,
         vertex_attributes: Vec<DataItem>,

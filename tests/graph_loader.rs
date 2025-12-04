@@ -979,7 +979,6 @@ async fn test_aql_graph_loader_full_topology() {
         vec![], // No edge attributes
         vec![vec![vertex_query], vec![edge_query]],
     )
-    .await
     .unwrap();
 
     // Track what we've received
@@ -1130,7 +1129,6 @@ async fn test_aql_graph_loader_filtered_with_depth() {
         vec![DataItem::new("depth".to_string(), DataType::U64)],
         vec![vec![vertex_query], vec![edge_query]],
     )
-    .await
     .unwrap();
 
     // Track what we've received
@@ -1289,7 +1287,6 @@ async fn test_aql_graph_loader_left_edges_only() {
         vec![DataItem::new("depth".to_string(), DataType::U64)],
         vec![vec![vertex_query, edge_query]],
     )
-    .await
     .unwrap();
 
     // Track what we've received
@@ -1426,7 +1423,6 @@ async fn test_aql_graph_loader_traversal_depth_6() {
         vec![DataItem::new("depth".to_string(), DataType::U64)], // Edge depth only
         vec![vec![traversal_query]],                             // Single query
     )
-    .await
     .unwrap();
 
     // Track what we've received

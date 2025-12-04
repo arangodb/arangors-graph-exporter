@@ -30,7 +30,7 @@ pub async fn load_custom_graph(
     GraphLoader::new_custom(db_config, load_config, vertex_collections, edge_collections).await
 }
 
-pub async fn load_aql_graph(
+pub fn load_aql_graph(
     db_config: DatabaseConfiguration,
     batch_size: u64,
     vertex_attributes: Vec<DataItem>,
@@ -44,5 +44,4 @@ pub async fn load_aql_graph(
         edge_attributes,
         queries,
     )
-    .await
 }
