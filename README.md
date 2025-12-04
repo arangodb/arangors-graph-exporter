@@ -19,11 +19,10 @@ This Rust-based library provides a high-performance and parallel way to load dat
 
 ## Installation
 
-Add the following to your `Cargo.toml`:
+Add the following crate to your `Cargo.toml` by doing:
 
-```toml
-[dependencies]
-arangors-graph-exporter = "0.0.9"
+```bash
+cargo add arangors-graph-exporter
 ```
 
 ## Usage
