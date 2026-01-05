@@ -116,7 +116,7 @@ You can declare the vertex and edge attributes upfront with their types for effi
 - **`DataType::I64`** - Signed 64-bit integers
   - Accepts: any integer, floats (rounded), numeric strings
   
-- **`DataType::F64`** - 64-bit floating point numbers
+- **`DataType::F64`** - 64-bit floating-point numbers
   - Accepts: any numeric value, numeric strings
   - Rejects: infinity and NaN values
   

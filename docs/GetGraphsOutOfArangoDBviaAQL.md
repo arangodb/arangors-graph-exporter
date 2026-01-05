@@ -17,14 +17,14 @@ we need another additional approach, which is:
  
 Therefore, we take as guiding principle two common use cases:
 
- 1. The subgraph is defined by naming the vertex collection(s) and
-    specifying a `FILTER` condition to say which vertices are taken, and by
-    naming the edge collection(s) and specifying a `FILTER` condition to say
-    which edges are taken. The `FILTER` conditions might be so that indexes
-    can help with the selection.
+1. The subgraph is defined by naming the vertex collection(s) and
+   specifying a `FILTER` condition to say which vertices are taken, and by
+   naming the edge collection(s) and specifying a `FILTER` condition to say
+   which edges are taken. The `FILTER` conditions might be so that indexes
+   can help with the selection.
 
- 2. The subgraph is defined by specifying one (or more) graph traversals 
-    which "finds" the subgraph to be exported.
+2. The subgraph is defined by specifying one (or more) graph traversals 
+   which "finds" the subgraph to be exported.
 
 Other use cases are of course possible and should also be supported, but
 we use these two for inspiration about the way we want to specify the
@@ -128,7 +128,7 @@ with their data types. The following data types are supported:
 - **`String`** - Text strings (accepts any value and converts it to string)
 - **`U64`** - Unsigned 64-bit integers (non-negative integers, positive floats are rounded)
 - **`I64`** - Signed 64-bit integers (any integer, floats are rounded)
-- **`F64`** - 64-bit floating point numbers (any numeric value, must be finite)
+- **`F64`** - 64-bit floating-point numbers (any numeric value, must be finite)
 - **`JSON`** - Any JSON value (accepts anything as-is without conversion)
 
 Example in Rust:
