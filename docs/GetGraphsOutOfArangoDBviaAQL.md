@@ -72,7 +72,7 @@ from different vertex collections concurrently.
 
 Although it is easy to distinguish a vertex from an edge by checking if there
 are attributes `_from` and `_to`, it is also not possible to just assume that
-the set of AQL results are simply a mixture of vertices and edges. Namyle, in 
+the set of AQL results are simply a mixture of vertices and edges. Namely, in 
 a query like:
 
 ```aql
