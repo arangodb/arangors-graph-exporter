@@ -99,11 +99,38 @@ Both `vertices` and `edges` attributes are optional.
 
 ##### Attribute Specification
 
-You can declare the vertex and edge attributes upfront with their types for efficient columnar storage:
+You can declare the vertex and edge attributes upfront with their types for efficient columnar storage.
 
-```json
-{ "name": "string", "age": "number" }
-```
+**Supported Data Types:**
+
+- **`DataType::Bool`** - Boolean values
+  - Accepts: `true`/`false`, strings like "true"/"false"/"yes"/"no"/"1"/"0", numbers (0=false, non-zero=true)
+  
+- **`DataType::String`** - Text strings
+  - Accepts: any value (null becomes empty string, objects/arrays become JSON strings)
+  
+- **`DataType::U64`** - Unsigned 64-bit integers (non-negative)
+  - Accepts: non-negative integers, positive floats (rounded), numeric strings
+  - Rejects: negative values
+  
+- **`DataType::I64`** - Signed 64-bit integers
+  - Accepts: any integer, floats (rounded), numeric strings
+  
+- **`DataType::F64`** - 64-bit floating point numbers
+  - Accepts: any numeric value, numeric strings
+  - Rejects: infinity and NaN values
+  
+- **`DataType::JSON`** - Any JSON value
+  - Accepts: anything without type conversion
+
+**Type Conversion Errors:**
+
+When a value cannot be converted to the specified type, a default value is used and the error is recorded:
+- `Bool` → `false`
+- `String` → `""` (empty string)
+- `U64` / `I64` → `0`
+- `F64` → `0.0`
+- `JSON` → `null`
 
 The `_id` attribute for vertices and `_from`/`_to` attributes for edges are automatically included and don't need to be specified.
 
