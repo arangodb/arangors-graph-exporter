@@ -44,8 +44,10 @@ pub struct GraphBatch {
     pub edge_attribute_values: Vec<Vec<Value>>,
     /// Total number of type conversion errors encountered
     pub type_error_count: usize,
-    /// First few type error messages (up to 10)
+    /// Type error messages (limited based on configuration)
     pub type_error_messages: Vec<String>,
+    /// Maximum number of type error messages to collect (None = no limit)
+    max_type_errors: Option<u64>,
 }
 
 impl DataItem {
@@ -55,7 +57,7 @@ impl DataItem {
 }
 
 impl GraphBatch {
-    fn new() -> Self {
+    fn new(max_type_errors: Option<u64>) -> Self {
         GraphBatch {
             vertex_ids: Vec::new(),
             vertex_attribute_values: Vec::new(),
@@ -64,12 +66,19 @@ impl GraphBatch {
             edge_attribute_values: Vec::new(),
             type_error_count: 0,
             type_error_messages: Vec::new(),
+            max_type_errors,
         }
     }
 
     fn add_type_error(&mut self, message: String) {
         self.type_error_count += 1;
-        if self.type_error_messages.len() < 10 {
+        // Add message only if we haven't reached the limit (or if there's no limit)
+        if let Some(max) = self.max_type_errors {
+            if (self.type_error_messages.len() as u64) < max {
+                self.type_error_messages.push(message);
+            }
+        } else {
+            // No limit, add all messages
             self.type_error_messages.push(message);
         }
     }
@@ -288,6 +297,8 @@ pub struct AqlGraphLoader {
     vertex_attributes: Vec<DataItem>,
     edge_attributes: Vec<DataItem>,
     queries: Vec<Vec<AqlQuery>>,
+    /// Maximum number of type error messages to collect per GraphBatch (None = no limit)
+    max_type_errors: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -342,12 +353,24 @@ struct GraphData {
 
 impl AqlGraphLoader {
     /// Create a new AQL graph loader
+    ///
+    /// # Arguments
+    ///
+    /// * `db_config` - Database configuration
+    /// * `batch_size` - Size of batches to fetch from the database
+    /// * `vertex_attributes` - List of vertex attributes to load with their types
+    /// * `edge_attributes` - List of edge attributes to load with their types
+    /// * `queries` - Nested list of AQL queries (outer list = sequential, inner list = parallel)
+    /// * `max_type_errors` - Maximum number of type error messages to collect per GraphBatch
+    ///   - `None` (recommended default): All type errors are reported
+    ///   - `Some(n)`: At most n type error messages are collected per GraphBatch (can be 0)
     pub fn new(
         db_config: DatabaseConfiguration,
         batch_size: u64,
         vertex_attributes: Vec<DataItem>,
         edge_attributes: Vec<DataItem>,
         queries: Vec<Vec<AqlQuery>>,
+        max_type_errors: Option<u64>,
     ) -> Result<Self, GraphLoaderError> {
         // Validate that we have at least one query
         if queries.is_empty() || queries.iter().all(|q| q.is_empty()) {
@@ -362,6 +385,7 @@ impl AqlGraphLoader {
             vertex_attributes,
             edge_attributes,
             queries,
+            max_type_errors,
         })
     }
 
@@ -404,6 +428,7 @@ impl AqlGraphLoader {
         let callback_clone = callback.clone();
         let vertex_attributes = self.vertex_attributes.clone();
         let edge_attributes = self.edge_attributes.clone();
+        let max_type_errors = self.max_type_errors;
 
         let consumer = std::thread::spawn(move || -> Result<(), GraphLoaderError> {
             while let Some(resp) = receiver.blocking_recv() {
@@ -441,7 +466,7 @@ impl AqlGraphLoader {
                 }
 
                 // Create a single batch for this database response
-                let mut batch = GraphBatch::new();
+                let mut batch = GraphBatch::new(max_type_errors);
 
                 // Process each item in the result array and accumulate into the batch
                 for item in result_array.unwrap() {
@@ -1009,7 +1034,8 @@ mod tests {
 
     #[test]
     fn test_graph_batch_type_error_tracking() {
-        let mut batch = GraphBatch::new();
+        // Test with a limit of 10
+        let mut batch = GraphBatch::new(Some(10));
 
         assert_eq!(batch.type_error_count, 0);
         assert_eq!(batch.type_error_messages.len(), 0);
@@ -1027,6 +1053,42 @@ mod tests {
         // Count should be 12, but messages capped at 10
         assert_eq!(batch.type_error_count, 12);
         assert_eq!(batch.type_error_messages.len(), 10);
+    }
+
+    #[test]
+    fn test_graph_batch_type_error_no_limit() {
+        // Test with no limit
+        let mut batch = GraphBatch::new(None);
+
+        assert_eq!(batch.type_error_count, 0);
+        assert_eq!(batch.type_error_messages.len(), 0);
+
+        // Add errors
+        for i in 1..=15 {
+            batch.add_type_error(format!("Error {}", i));
+        }
+
+        // All 15 errors should be tracked
+        assert_eq!(batch.type_error_count, 15);
+        assert_eq!(batch.type_error_messages.len(), 15);
+    }
+
+    #[test]
+    fn test_graph_batch_type_error_zero_limit() {
+        // Test with zero limit (no messages collected, but count still tracked)
+        let mut batch = GraphBatch::new(Some(0));
+
+        assert_eq!(batch.type_error_count, 0);
+        assert_eq!(batch.type_error_messages.len(), 0);
+
+        // Add errors
+        for i in 1..=5 {
+            batch.add_type_error(format!("Error {}", i));
+        }
+
+        // Count should be 5, but no messages collected
+        assert_eq!(batch.type_error_count, 5);
+        assert_eq!(batch.type_error_messages.len(), 0);
     }
 
     #[test]

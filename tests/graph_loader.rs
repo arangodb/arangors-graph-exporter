@@ -978,6 +978,7 @@ async fn test_aql_graph_loader_full_topology() {
         vec![], // No vertex attributes
         vec![], // No edge attributes
         vec![vec![vertex_query], vec![edge_query]],
+        None, // No limit on type errors
     )
     .unwrap();
 
@@ -1128,6 +1129,7 @@ async fn test_aql_graph_loader_filtered_with_depth() {
         vec![DataItem::new("depth".to_string(), DataType::U64)],
         vec![DataItem::new("depth".to_string(), DataType::U64)],
         vec![vec![vertex_query], vec![edge_query]],
+        None, // No limit on type errors
     )
     .unwrap();
 
@@ -1286,6 +1288,7 @@ async fn test_aql_graph_loader_left_edges_only() {
         vec![DataItem::new("depth".to_string(), DataType::U64)],
         vec![DataItem::new("depth".to_string(), DataType::U64)],
         vec![vec![vertex_query, edge_query]],
+        None, // No limit on type errors
     )
     .unwrap();
 
@@ -1422,6 +1425,7 @@ async fn test_aql_graph_loader_traversal_depth_6() {
         vec![],                                                  // No vertex attributes
         vec![DataItem::new("depth".to_string(), DataType::U64)], // Edge depth only
         vec![vec![traversal_query]],                             // Single query
+        None,                                                    // No limit on type errors
     )
     .unwrap();
 

@@ -99,11 +99,38 @@ Both `vertices` and `edges` attributes are optional.
 
 ##### Attribute Specification
 
-You can declare the vertex and edge attributes upfront with their types for efficient columnar storage:
+You can declare the vertex and edge attributes upfront with their types for efficient columnar storage.
 
-```json
-{ "name": "string", "age": "number" }
-```
+**Supported Data Types:**
+
+- **`DataType::Bool`** - Boolean values
+  - Accepts: `true`/`false`, strings like "true"/"false"/"yes"/"no"/"1"/"0", numbers (0=false, non-zero=true)
+  
+- **`DataType::String`** - Text strings
+  - Accepts: any value (null becomes empty string, objects/arrays become JSON strings)
+  
+- **`DataType::U64`** - Unsigned 64-bit integers (non-negative)
+  - Accepts: non-negative integers, positive floats (rounded), numeric strings
+  - Rejects: negative values
+  
+- **`DataType::I64`** - Signed 64-bit integers
+  - Accepts: any integer, floats (rounded), numeric strings
+  
+- **`DataType::F64`** - 64-bit floating-point numbers
+  - Accepts: any numeric value, numeric strings
+  - Rejects: infinity and NaN values
+  
+- **`DataType::JSON`** - Any JSON value
+  - Accepts: anything without type conversion
+
+**Type Conversion Errors:**
+
+When a value cannot be converted to the specified type, a default value is used and the error is recorded:
+- `Bool` → `false`
+- `String` → `""` (empty string)
+- `U64` / `I64` → `0`
+- `F64` → `0.0`
+- `JSON` → `null`
 
 The `_id` attribute for vertices and `_from`/`_to` attributes for edges are automatically included and don't need to be specified.
 
@@ -229,7 +256,19 @@ async fn create_aql_graph_loader() -> Result<AqlGraphLoader, GraphLoaderError> {
         vec![edge_query],                    // Then load edges
     ];
     
-    AqlGraphLoader::new(db_config, batch_size, vertex_attributes, edge_attributes, queries).await
+    // Configure type error reporting limit
+    // None = report all type errors (recommended default)
+    // Some(n) = report at most n type errors per GraphBatch
+    let max_type_errors = None;
+    
+    AqlGraphLoader::new(
+        db_config,
+        batch_size,
+        vertex_attributes,
+        edge_attributes,
+        queries,
+        max_type_errors
+    )
 }
 ```
 
@@ -265,7 +304,7 @@ async fn create_traversal_loader() -> Result<AqlGraphLoader, GraphLoaderError> {
     
     let queries = vec![vec![traversal_query]];
     
-    AqlGraphLoader::new(db_config, batch_size, vertex_attributes, edge_attributes, queries).await
+    AqlGraphLoader::new(db_config, batch_size, vertex_attributes, edge_attributes, queries, None)
 }
 ```
 
@@ -318,7 +357,33 @@ The callback receives a mutable reference to a `GraphBatch` containing both vert
 - **edge_to_ids**: Vector of target vertex IDs as byte vectors
 - **edge_attribute_values**: Vector of attribute vectors, parallel to edge IDs
 - **type_error_count**: Total number of type conversion errors encountered
-- **type_error_messages**: First few type error messages (up to 10)
+- **type_error_messages**: Type error messages (limited based on configuration)
+
+#### Type Error Reporting Configuration
+
+The `AqlGraphLoader` allows you to configure how many type error messages are collected per `GraphBatch`:
+
+- **`None` (recommended default)**: All type conversion errors are reported. This is useful for debugging and ensures you see every issue.
+- **`Some(n)`**: At most `n` type error messages are collected per `GraphBatch`. The total count is always tracked in `type_error_count`, but only the first `n` messages are stored in `type_error_messages`. This can help reduce memory usage when dealing with data that has many type errors.
+- **`Some(0)`**: No error messages are collected (but `type_error_count` is still incremented). Use this if you only need to know the count of errors, not the details.
+
+Examples:
+```rust
+// Report all type errors (recommended)
+let loader = AqlGraphLoader::new(
+    db_config, batch_size, vertex_attrs, edge_attrs, queries, None
+)?;
+
+// Report at most 10 type errors per batch
+let loader = AqlGraphLoader::new(
+    db_config, batch_size, vertex_attrs, edge_attrs, queries, Some(10)
+)?;
+
+// Track error count only, no messages
+let loader = AqlGraphLoader::new(
+    db_config, batch_size, vertex_attrs, edge_attrs, queries, Some(0)
+)?;
+```
 
 The callback signature is:
 

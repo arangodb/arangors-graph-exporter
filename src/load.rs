@@ -36,6 +36,7 @@ pub fn load_aql_graph(
     vertex_attributes: Vec<DataItem>,
     edge_attributes: Vec<DataItem>,
     queries: Vec<Vec<AqlQuery>>,
+    max_type_errors: Option<u64>,
 ) -> Result<AqlGraphLoader, GraphLoaderError> {
     AqlGraphLoader::new(
         db_config,
@@ -43,5 +44,6 @@ pub fn load_aql_graph(
         vertex_attributes,
         edge_attributes,
         queries,
+        max_type_errors,
     )
 }
