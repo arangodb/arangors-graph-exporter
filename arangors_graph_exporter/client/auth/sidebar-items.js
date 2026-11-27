@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_auth"]};
+window.SIDEBAR_ITEMS = {"fn":["handle_auth","handle_metadata_auth"]};

@@ -1,9 +1,9 @@
 (function() {
-    var implementors = Object.fromEntries([["arangors_graph_exporter",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;<a class=\"struct\" href=\"https://doc.rust-lang.org/1.92.0/alloc/string/struct.String.html\" title=\"struct alloc::string::String\">String</a>&gt; for <a class=\"enum\" href=\"arangors_graph_exporter/errors/enum.GraphLoaderError.html\" title=\"enum arangors_graph_exporter::errors::GraphLoaderError\">GraphLoaderError</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;Error&gt; for <a class=\"enum\" href=\"arangors_graph_exporter/errors/enum.GraphLoaderError.html\" title=\"enum arangors_graph_exporter::errors::GraphLoaderError\">GraphLoaderError</a>"]]]]);
+    const implementors = Object.fromEntries([["arangors_graph_exporter",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.100.0/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;Error&gt; for <a class=\"enum\" href=\"arangors_graph_exporter/errors/enum.GraphLoaderError.html\" title=\"enum arangors_graph_exporter::errors::GraphLoaderError\">GraphLoaderError</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.100.0/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;<a class=\"struct\" href=\"https://doc.rust-lang.org/1.100.0/alloc/string/struct.String.html\" title=\"struct alloc::string::String\">String</a>&gt; for <a class=\"enum\" href=\"arangors_graph_exporter/errors/enum.GraphLoaderError.html\" title=\"enum arangors_graph_exporter::errors::GraphLoaderError\">GraphLoaderError</a>",0]]]]);
     if (window.register_implementors) {
         window.register_implementors(implementors);
     } else {
         window.pending_implementors = implementors;
     }
 })()
-//{"start":57,"fragment_lengths":[831]}
+//{"start":59,"fragment_lengths":[838]}
