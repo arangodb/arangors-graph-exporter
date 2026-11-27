@@ -6,6 +6,15 @@ pub struct DatabaseConfiguration {
     pub password: String,
     pub jwt_token: String,
     pub tls_cert: Option<String>,
+    /// Optional bearer token used only to detect the deployment: the calls to
+    /// `/_api/version`, `/_admin/support-info` and
+    /// `/_admin/cluster/shardDistribution`. These return metadata only, but
+    /// need admin rights, so without them a non-admin user falls back to the
+    /// slower AQL load strategy. All data is still read with the main
+    /// credentials (`jwt_token`, or `username` and `password`), so ArangoDB
+    /// keeps applying that identity's permissions to every collection read.
+    /// If `None`, the main credentials are used for these calls, too.
+    pub metadata_jwt_token: Option<String>,
 }
 
 impl Default for DatabaseConfiguration {
@@ -21,6 +30,7 @@ pub struct DatabaseConfigurationBuilder {
     password: Option<String>,
     jwt_token: Option<String>,
     tls_cert: Option<String>,
+    metadata_jwt_token: Option<String>,
 }
 
 impl Default for DatabaseConfigurationBuilder {
@@ -38,6 +48,7 @@ impl DatabaseConfigurationBuilder {
             password: None,
             jwt_token: None,
             tls_cert: None,
+            metadata_jwt_token: None,
         }
     }
 
@@ -71,6 +82,13 @@ impl DatabaseConfigurationBuilder {
         self
     }
 
+    /// Bearer token for the deployment detection calls only, see
+    /// [`DatabaseConfiguration::metadata_jwt_token`].
+    pub fn metadata_jwt_token(mut self, metadata_jwt_token: String) -> Self {
+        self.metadata_jwt_token = Some(metadata_jwt_token);
+        self
+    }
+
     pub fn build(self) -> DatabaseConfiguration {
         DatabaseConfiguration {
             database: self.database.unwrap_or_else(|| "_system".to_string()),
@@ -81,6 +99,7 @@ impl DatabaseConfigurationBuilder {
             password: self.password.unwrap_or_default(),
             jwt_token: self.jwt_token.unwrap_or_default(),
             tls_cert: self.tls_cert,
+            metadata_jwt_token: self.metadata_jwt_token,
         }
     }
 }

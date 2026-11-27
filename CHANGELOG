@@ -1,3 +1,18 @@
+Unreleased
+-------------------
+
+* New optional `DatabaseConfiguration::metadata_jwt_token` (builder:
+  `metadata_jwt_token`). When set, it is sent instead of the main credentials
+  on the three calls that detect the deployment and pick the load strategy:
+  `/_api/version`, `/_admin/support-info` and
+  `/_admin/cluster/shardDistribution`. These return metadata only but need
+  admin rights, so a caller can pass a token of an identity that has them
+  (for example a service identity) and still read all data with the user's
+  own credentials. Without it, a non-admin user falls back to the slower AQL
+  strategy. Unset or empty: behaviour unchanged. Adding a public field to
+  `DatabaseConfiguration` breaks code that builds it as a struct literal;
+  the builder is not affected.
+
 0.0.9 (2024-08-29)
 -------------------
 
