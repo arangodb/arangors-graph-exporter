@@ -336,31 +336,24 @@ impl GraphLoader {
         vertex_global_fields: Option<Vec<String>>,
         edge_global_fields: Option<Vec<String>>,
     ) -> Result<GraphLoader, GraphLoaderError> {
-        let vertex_coll_list;
-        let edge_coll_list;
+        let (vertex_collections, edge_collections) =
+            get_graph_collections(&db_config, graph_name).await?;
 
-        match get_graph_collections(&db_config, graph_name).await {
-            Ok((vertex_collections, edge_collections)) => {
-                vertex_coll_list = vertex_collections
-                    .iter()
-                    .map(|c| CollectionInfo {
-                        name: c.clone(),
-                        fields: vertex_global_fields.clone().unwrap_or_default(),
-                    })
-                    .collect();
+        let vertex_coll_list = vertex_collections
+            .iter()
+            .map(|c| CollectionInfo {
+                name: c.clone(),
+                fields: vertex_global_fields.clone().unwrap_or_default(),
+            })
+            .collect();
 
-                edge_coll_list = edge_collections
-                    .iter()
-                    .map(|c| CollectionInfo {
-                        name: c.clone(),
-                        fields: edge_global_fields.clone().unwrap_or_default(),
-                    })
-                    .collect();
-            }
-            Err(err) => {
-                return Err(err);
-            }
-        }
+        let edge_coll_list = edge_collections
+            .iter()
+            .map(|c| CollectionInfo {
+                name: c.clone(),
+                fields: edge_global_fields.clone().unwrap_or_default(),
+            })
+            .collect();
 
         let graph_loader =
             GraphLoader::new(db_config, load_config, vertex_coll_list, edge_coll_list).await?;
@@ -581,7 +574,7 @@ impl GraphLoader {
                 }
                 Some(LoadStrategy::Aql) => {
                     let mut v_collection_infos: Vec<CollectionInfo> = vec![];
-                    for (_name, info) in self.v_collections.iter() {
+                    for info in self.v_collections.values() {
                         v_collection_infos.push(info.clone());
                     }
 
@@ -869,7 +862,7 @@ impl GraphLoader {
             }
             Some(LoadStrategy::Aql) => {
                 let mut e_collection_infos: Vec<CollectionInfo> = vec![];
-                for (_name, info) in self.e_collections.iter() {
+                for info in self.e_collections.values() {
                     e_collection_infos.push(info.clone());
                 }
 
