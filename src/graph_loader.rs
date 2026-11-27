@@ -1,5 +1,5 @@
 use crate::aql::get_all_data_aql;
-use crate::client::auth::handle_auth;
+use crate::client::auth::{handle_auth, handle_metadata_auth};
 use crate::client::config::ClientConfig;
 use crate::client::{build_client, make_url};
 use crate::errors::GraphLoaderError;
@@ -110,7 +110,7 @@ impl GraphLoader {
             .deployment_type
             == DeploymentType::Cluster;
         let server_version_url = self.db_config.endpoints[0].clone() + "/_api/version";
-        let resp = handle_auth(client.get(server_version_url), &self.db_config)
+        let resp = handle_metadata_auth(client.get(server_version_url), &self.db_config)
             .send()
             .await;
         let version_info_result =
@@ -177,9 +177,10 @@ impl GraphLoader {
         client: &ClientWithMiddleware,
     ) -> Result<SupportInfo, String> {
         let server_information_url = self.db_config.endpoints[0].clone() + "/_admin/support-info";
-        let support_info_res = handle_auth(client.get(server_information_url), &self.db_config)
-            .send()
-            .await;
+        let support_info_res =
+            handle_metadata_auth(client.get(server_information_url), &self.db_config)
+                .send()
+                .await;
         let support_info_result = handle_arangodb_response_with_parsed_body::<SupportInfo>(
             support_info_res,
             StatusCode::OK,
@@ -298,7 +299,9 @@ impl GraphLoader {
 
                 // First ask for the shard distribution:
                 let url = make_url(&self.db_config, "/_admin/cluster/shardDistribution");
-                let resp = handle_auth(client.get(url), &self.db_config).send().await;
+                let resp = handle_metadata_auth(client.get(url), &self.db_config)
+                    .send()
+                    .await;
 
                 let shard_dist = handle_arangodb_response_with_parsed_body::<
                     crate::sharding::ShardDistribution,
